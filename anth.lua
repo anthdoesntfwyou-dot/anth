@@ -1,4 +1,4 @@
--- ANTH HUB - v1.8 Delta
+-- ANTH HUB - v1.9 Delta
 -- Fixes: draggable logo, hug fixed, noclip restore, NDS survive,
 -- zombie (server-visible), headless re-apply, more fun physics
 -- Same unified hub, rewritten for Delta (mobile + PC)
@@ -227,9 +227,9 @@ main.Name = "Main"
 main.AnchorPoint = Vector2.new(0.5, 0.5)
 main.Position = UDim2.new(0.5, 0, 0.5, 0)
 if IS_MOBILE then
-	main.Size = UDim2.new(0.94, 0, 0, 440)
+	main.Size = UDim2.new(0.94, 0, 0, 540)
 else
-	main.Size = UDim2.new(0, 500, 0, 400)
+	main.Size = UDim2.new(0, 500, 0, 520)
 end
 main.BackgroundColor3 = BG
 main.BorderSizePixel = 0
@@ -249,7 +249,7 @@ local titleTxt = Instance.new("TextLabel")
 titleTxt.Size = UDim2.new(1, -90, 1, 0)
 titleTxt.Position = UDim2.new(0, 12, 0, 0)
 titleTxt.BackgroundTransparency = 1
-titleTxt.Text = "ANTH // TERMINAL [v1.8 DELTA]"
+titleTxt.Text = "ANTH // TERMINAL [v1.9 DELTA]"
 titleTxt.TextColor3 = NEON
 titleTxt.Font = Enum.Font.Code
 titleTxt.TextSize = 15
@@ -355,7 +355,8 @@ addCorner(logBox, 8)
 addStroke(logBox, NEON, 1)
 
 local logTxt = Instance.new("TextLabel")
-logTxt.Size = UDim2.new(1, -10, 1, 0)
+logTxt.AutomaticSize = Enum.AutomaticSize.Y
+logTxt.Size = UDim2.new(1, -10, 0, 0)
 logTxt.Position = UDim2.new(0, 5, 0, 0)
 logTxt.BackgroundTransparency = 1
 logTxt.TextColor3 = NEON
@@ -419,10 +420,99 @@ barBox.Text = ""
 barBox.ClearTextOnFocus = false
 barBox.Parent = inputFrame
 
+-- ================= AUTOCOMPLETE =================
+-- Type "un" and it spells out the closest commands. Tap the green
+-- suggestion bar to fill it in. This is why ;unvortex was "missing"
+-- before - it was in the list, but the list was clipped and you
+-- could not see it, and there was no way to complete a word.
+local ALL_CMDS = {"fly","unfly","speed","jump","god","ungod","noclip","clip","spin","unspin","tp","goto","bring","fling","kill","reset","sit","blackhole","unblackhole","tornado","untornado","tsunami","untsunami","orbit","unorbit","fountain","unfountain","rain","unrain","magnet","unmagnet","launch","quake","earthquake","explode","swirl","unswirl","vortex","unvortex","stopvortex","meteor","survive","unsurvive","anchor","unanchor","antifling","noantifling","nofling","hug","unhug","backpack","unbackpack","headsit","unheadsit","headless","unheadless","zombie","unzombie","normal","dance","dance2","dance3","floss","shuffle","dab","wave","point","cheer","laugh","cry","bow","salute","think","shy","clap","sleep","lay","stopemote","unemote","cmds","help","ecmds","prefix","setprefix","changeprefix","wand","unwand","throw","boom","explosion","nuke","invisible","visible","big","tiny","size","normalsize","carry","uncarry","fire","smoke","sparkles","aura","unfx","unfire","unaura","rejoin","stop","stopall","getoff"}
+local suggestBtn = Instance.new("TextButton")
+suggestBtn.Size = UDim2.new(1, -20, 0, 28)
+suggestBtn.Position = UDim2.new(0, 10, 0, 182)
+suggestBtn.BackgroundColor3 = Color3.fromRGB(0, 40, 15)
+suggestBtn.TextColor3 = NEON
+suggestBtn.Font = Enum.Font.Code
+suggestBtn.TextSize = 13
+suggestBtn.Text = ""
+suggestBtn.Visible = false
+suggestBtn.Parent = main
+addCorner(suggestBtn, 8)
+addStroke(suggestBtn, NEON, 1)
+local function getSuggestMatches(partial)
+	local out = {}
+	if not partial or #partial < 1 then
+		return out
+	end
+	partial = partial:lower()
+	for _, c in ipairs(ALL_CMDS) do
+		if c:sub(1, #partial) == partial then
+			table.insert(out, c)
+			if #out >= 3 then
+				break
+			end
+		end
+	end
+	return out
+end
+local function updateSuggest()
+	local txt = barBox.Text or ""
+	txt = txt:gsub("^%s+", "")
+	if PREFIXES[txt:sub(1, 1)] then
+		txt = txt:sub(2)
+	end
+	local first = txt:match("^(%S+)") or ""
+	if #first < 1 then
+		suggestBtn.Visible = false
+		return
+	end
+	local matches = getSuggestMatches(first)
+	if #matches == 0 then
+		suggestBtn.Visible = false
+		return
+	end
+	if #matches == 1 and matches[1] == first:lower() then
+		suggestBtn.Visible = false
+		return
+	end
+	local label = "Tap: "
+	for i, m in ipairs(matches) do
+		if i > 1 then
+			label = label .. "  "
+		end
+		label = label .. PREFIX .. m
+	end
+	suggestBtn.Text = label
+	suggestBtn.Visible = true
+end
+barBox:GetPropertyChangedSignal("Text"):Connect(updateSuggest)
+suggestBtn.MouseButton1Click:Connect(function()
+	local txt = barBox.Text or ""
+	txt = txt:gsub("^%s+", "")
+	local pre = ""
+	if PREFIXES[txt:sub(1, 1)] then
+		pre = txt:sub(1, 1)
+		txt = txt:sub(2)
+	else
+		pre = PREFIX
+	end
+	local first = txt:match("^(%S+)") or ""
+	local rest = txt:match("^%S+%s+(.*)$") or ""
+	local matches = getSuggestMatches(first)
+	if #matches > 0 then
+		if rest ~= "" then
+			barBox.Text = pre .. matches[1] .. " " .. rest
+		else
+			barBox.Text = pre .. matches[1]
+		end
+		barBox:CaptureFocus()
+	end
+	updateSuggest()
+end)
+
 -- Quick buttons
 local quick = Instance.new("Frame")
 quick.Size = UDim2.new(1, -20, 0, 46)
-quick.Position = UDim2.new(0, 10, 0, 182)
+quick.Position = UDim2.new(0, 10, 0, 214)
 quick.BackgroundTransparency = 1
 quick.Parent = main
 
@@ -432,8 +522,8 @@ local stopBtn = makeButton(quick, "STOP ■", UDim2.new(0.32, 0, 1, 0), UDim2.ne
 
 -- Collapsible commands list
 local cmdsFrame = Instance.new("ScrollingFrame")
-cmdsFrame.Size = UDim2.new(1, -20, 0, 150)
-cmdsFrame.Position = UDim2.new(0, 10, 0, 236)
+cmdsFrame.Size = UDim2.new(1, -20, 0, 200)
+cmdsFrame.Position = UDim2.new(0, 10, 0, 268)
 cmdsFrame.BackgroundColor3 = BG2
 cmdsFrame.BorderSizePixel = 0
 cmdsFrame.ScrollBarThickness = 3
@@ -445,7 +535,8 @@ addCorner(cmdsFrame, 8)
 addStroke(cmdsFrame, NEON2, 1)
 
 local cmdsTxt = Instance.new("TextLabel")
-cmdsTxt.Size = UDim2.new(1, -10, 1, 0)
+cmdsTxt.AutomaticSize = Enum.AutomaticSize.Y
+cmdsTxt.Size = UDim2.new(1, -10, 0, 0)
 cmdsTxt.Position = UDim2.new(0, 5, 0, 0)
 cmdsTxt.BackgroundTransparency = 1
 cmdsTxt.TextColor3 = TXT
@@ -454,7 +545,7 @@ cmdsTxt.TextSize = 13
 cmdsTxt.TextXAlignment = Enum.TextXAlignment.Left
 cmdsTxt.TextYAlignment = Enum.TextYAlignment.Top
 cmdsTxt.TextWrapped = true
-cmdsTxt.Text = "CORE\n;fly ;unfly ;speed 50 ;jump 80 ;god ;ungod\n;noclip ;clip ;spin 20 ;unspin ;tp bacon\n;bring bacon ;fling bacon ;reset ;sit\n\nSURVIVAL (NDS fix)\n;survive ;unsurvive ;anchor ;unanchor\n;antifling ;noantifling\n\nPHYSICS\n;blackhole [player] ;unblackhole\n;tornado [player] ;untornado\n;tsunami ;untsunami\n;orbit [player] ;fountain ;rain ;magnet [player]\n;launch ;quake ;explode ;swirl ;stop\n\nSOCIAL (fixed)\n;hug [player/nearest] ;unhug\n;backpack [player] ;unbackpack\n;headsit [player] ;unheadsit\n;headless ;unheadless\n\nBOOM\n;boom ;explode\n\nWAND\n;wand ;unwand ;throw\n\nANIM (everyone sees)\n;zombie ;unzombie\n\nMORE PHYSICS\n;vortex [player] ;unvortex ;meteor [player]\n\nLOOKS (everyone sees)\n;invisible ;visible ;big ;tiny ;normalsize\n;fire ;smoke ;sparkles ;aura ;unfx\n\nCARRY\n;carry [player] ;uncarry\n\n;rejoin\n\nEMOTES\n;dance ;dance2 ;dance3 ;floss ;shuffle ;dab\n;wave ;point ;cheer ;laugh ;cry ;bow\n;salute ;think ;shy ;clap ;sleep ;sit ;lay\n;stopemote"
+cmdsTxt.Text = "CORE\n;cmds ;help ;prefix / ;fly ;unfly ;speed 50 ;jump 80\n;god ;ungod ;noclip ;clip ;spin 20 ;unspin\n;tp bacon ;goto bacon ;bring bacon ;fling bacon\n;kill bacon ;reset ;sit ;stop ;stopall\n\nSURVIVAL (NDS fix)\n;survive ;unsurvive ;anchor ;unanchor\n;antifling ;noantifling\n\nPHYSICS - pull from everywhere\n;blackhole [player] ;unblackhole\n;tornado [player] ;untornado\n;tsunami ;untsunami\n;orbit [player] ;unorbit ;fountain ;unfountain\n;rain ;unrain ;magnet [player] ;unmagnet\n;launch ;quake ;explode ;swirl ;unswirl\n;vortex [player] ;unvortex ;stopvortex\n;meteor [player]\n\nBOOM / NUKE\n;boom [player] ;explode ;nuke\n\nSOCIAL (everyone sees)\n;hug [player/nearest] ;unhug\n;backpack [player] ;unbackpack\n;headsit [player] ;unheadsit ;getoff\n;carry [player] ;uncarry\n;headless ;unheadless\n\nWAND\n;wand ;unwand ;throw\n\nANIM (everyone sees)\n;zombie ;unzombie ;normal\n\nLOOKS (everyone sees)\n;invisible ;visible ;big ;tiny ;size 1.5 ;normalsize\n;fire ;smoke ;sparkles ;aura ;unfx\n\n;rejoin\n\nEMOTES\n;dance ;dance2 ;dance3 ;floss ;shuffle ;dab\n;wave ;point ;cheer ;laugh ;cry ;bow\n;salute ;think ;shy ;clap ;sleep ;sit ;lay\n;stopemote ;unemote"
 cmdsTxt.Parent = cmdsFrame
 local CmdsTemplate = cmdsTxt.Text
 local function refreshCmds()
@@ -1088,7 +1179,7 @@ local function startBH(t)
 					end
 					local off = center - part.Position
 					local d = off.Magnitude
-					if d > 0.5 and d < 300 then
+					if d > 0.5 and d < 500 then
 						local strength = math.clamp(200 - d, 40, 180)
 						local vel = off.Unit * strength
 						local tan = Vector3.new(-off.Z, 0, off.X)
@@ -1151,7 +1242,7 @@ local function startTOR(t)
 	v.Parent = Workspace
 	TORPart = v
 	task.spawn(function()
-		while TORActive do
+		while TORActive and isCurrentRun() do
 			task.wait(0.03)
 			local center = nil
 			if TORTarget and TORTarget.Character then
@@ -1168,12 +1259,12 @@ local function startTOR(t)
 					TORPart.CFrame = CFrame.new(center + Vector3.new(0, 25, 0)) * CFrame.Angles(0, 0, math.rad(90))
 				end
 				for _, part in ipairs(getUnanchored()) do
-					if not TORActive then
+					if not TORActive or not isCurrentRun() then
 						break
 					end
 					local off = part.Position - center
 					local flat = Vector3.new(off.X, 0, off.Z).Magnitude
-					if flat < 80 and off.Y > -5 and off.Y < 60 then
+					if flat < 500 and off.Y > -20 and off.Y < 150 then
 						local tan = Vector3.new(-off.Z, 0, off.X)
 						if tan.Magnitude < 0.1 then
 							tan = Vector3.new(1, 0, 0)
@@ -1181,12 +1272,12 @@ local function startTOR(t)
 						tan = tan.Unit
 						local inw = Vector3.new(-off.X, 0, -off.Z)
 						if inw.Magnitude > 0.1 then
-							inw = inw.Unit * 20
+							inw = inw.Unit * 40
 						else
 							inw = Vector3.new(0, 0, 0)
 						end
-						local up = 35
-						if off.Y > 40 then
+						local up = 50
+						if off.Y > 60 then
 							up = -10
 						end
 						pcall(function()
@@ -1459,7 +1550,8 @@ local function doExplode()
 			end)
 		end
 	end
-	notify("Explode!")
+	flingPlayersFrom(c, 120, 200)
+	notify("Explode! - flung parts AND players")
 end
 
 local function doMeteor(target)
@@ -1492,6 +1584,55 @@ local function doMeteor(target)
 		end
 	end
 	notify("Meteor! Dropped " .. tostring(count) .. " parts on them.")
+end
+
+local function getAllUnanchoredNoSize()
+	local list = {}
+	for _, o in ipairs(Workspace:GetDescendants()) do
+		if o:IsA("BasePart") and not o.Anchored then
+			if o.Name ~= "BlackholeCenter" and o.Name ~= "TornadoCenter" and o.Name ~= "TsunamiWall" and o.Name ~= "ANTH_BoomFlash" then
+				local isChar = false
+				for _, plr in ipairs(Players:GetPlayers()) do
+					if plr.Character and o:IsDescendantOf(plr.Character) then
+						isChar = true
+						break
+					end
+				end
+				if not isChar then
+					table.insert(list, o)
+				end
+			end
+		end
+	end
+	return list
+end
+
+local function doNuke()
+	local hrp = getHRP()
+	local c = hrp and hrp.Position or Vector3.new(0, 10, 0)
+	for i = 1, 3 do
+		local ex = Instance.new("Explosion")
+		ex.Position = c + Vector3.new((i - 2) * 10, 0, 0)
+		ex.BlastRadius = 100
+		ex.BlastPressure = 1000000
+		ex.DestroyJointRadiusPercent = 1
+		ex.Parent = Workspace
+	end
+	for _, part in ipairs(getAllUnanchoredNoSize()) do
+		local off = part.Position - c
+		local dir = off
+		if dir.Magnitude < 0.5 then
+			dir = Vector3.new(0, 1, 0)
+		else
+			dir = dir.Unit
+		end
+		pcall(function()
+			part.AssemblyLinearVelocity = dir * 250 + Vector3.new(0, 200, 0)
+			part.AssemblyAngularVelocity = Vector3.new(math.random(-50, 50), math.random(-50, 50), math.random(-50, 50))
+		end)
+	end
+	flingPlayersFrom(c, 500, 300)
+	notify("NUKE! Flung the entire map - you will probably die too, that is the point.")
 end
 
 local function stopAll()
@@ -1785,6 +1926,36 @@ end
 --  * looks and sounds big
 -- Anchored blocks stay put for everyone, no matter how big the
 -- boom is. That is Roblox physics, not a hub bug.
+local function flingPlayersFrom(pos, radius, power)
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer and plr.Character then
+			local ph = plr.Character:FindFirstChild("HumanoidRootPart")
+			if ph then
+				local off = ph.Position - pos
+				local d = off.Magnitude
+				if d < radius and d > 0.5 then
+					pcall(function()
+						ph.AssemblyLinearVelocity = off.Unit * power + Vector3.new(0, power * 0.7, 0)
+						local bv = Instance.new("BodyAngularVelocity")
+						bv.AngularVelocity = Vector3.new(0, 100, 0)
+						bv.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+						bv.Parent = ph
+						task.delay(1, function()
+							if bv.Parent then
+								bv:Destroy()
+							end
+						end)
+					end)
+				elseif d <= 0.5 then
+					pcall(function()
+						ph.AssemblyLinearVelocity = Vector3.new(0, power, 0)
+					end)
+				end
+			end
+		end
+	end
+end
+
 local function doBoom(pos)
 	if not pos then
 		local hrp = getHRP()
@@ -1836,7 +2007,8 @@ local function doBoom(pos)
 			end)
 		end
 	end
-	notify("BOOM! - flung loose parts, broke welds. Anchored blocks stay - server owns them.")
+	flingPlayersFrom(pos, 35, 200)
+	notify("BOOM! - flung loose parts AND players. Anchored blocks stay - server owns them.")
 end
 
 -- ================= HUG / BACKPACK / HEADSIT =================
@@ -2685,9 +2857,11 @@ local function runCommand(raw)
 		stopAllEmotes()
 	elseif cmd == "vortex" then
 		startFun("vortex", getPlayer(args[1]))
-	elseif cmd == "unvortex" or cmd == "stopvortex" then
+	elseif cmd == "unvortex" or cmd == "stopvortex" or cmd == "novortex" then
 		stopFun()
 		notify("Vortex OFF")
+	elseif cmd == "nuke" then
+		doNuke()
 	elseif cmd == "meteor" then
 		doMeteor(getPlayer(args[1]))
 	elseif cmd == "invisible" then
@@ -2726,8 +2900,39 @@ end
 
 local function submit()
 	if barBox.Text ~= "" then
-		runCommand(barBox.Text)
+		local txt = barBox.Text
+		local pre = ""
+		local body = txt
+		if PREFIXES[body:sub(1, 1)] then
+			pre = body:sub(1, 1)
+			body = body:sub(2)
+		else
+			pre = PREFIX
+		end
+		local first = body:match("^(%S+)") or ""
+		local rest = body:match("^%S+%s+(.*)$") or ""
+		if #first >= 1 then
+			local exact = false
+			for _, c in ipairs(ALL_CMDS) do
+				if c == first:lower() then
+					exact = true
+					break
+				end
+			end
+			if not exact then
+				local matches = getSuggestMatches(first)
+				if #matches == 1 then
+					if rest ~= "" then
+						txt = pre .. matches[1] .. " " .. rest
+					else
+						txt = pre .. matches[1]
+					end
+				end
+			end
+		end
+		runCommand(txt)
 		barBox.Text = ""
+		suggestBtn.Visible = false
 	end
 end
 
