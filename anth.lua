@@ -28,6 +28,13 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 local PREFIX = ";"
+local PREFIXES = {}
+PREFIXES[";"] = true
+PREFIXES["!"] = true
+PREFIXES["/"] = true
+PREFIXES["?"] = true
+PREFIXES["."] = true
+PREFIXES[":"] = true
 
 local IS_MOBILE = false
 pcall(function()
@@ -124,7 +131,7 @@ local titleTxt = Instance.new("TextLabel")
 titleTxt.Size = UDim2.new(1, -90, 1, 0)
 titleTxt.Position = UDim2.new(0, 12, 0, 0)
 titleTxt.BackgroundTransparency = 1
-titleTxt.Text = "ANTH // TERMINAL [v1.2 DELTA]"
+titleTxt.Text = "ANTH // TERMINAL [v1.3 DELTA]"
 titleTxt.TextColor3 = NEON
 titleTxt.Font = Enum.Font.Code
 titleTxt.TextSize = 15
@@ -329,8 +336,14 @@ cmdsTxt.TextSize = 13
 cmdsTxt.TextXAlignment = Enum.TextXAlignment.Left
 cmdsTxt.TextYAlignment = Enum.TextYAlignment.Top
 cmdsTxt.TextWrapped = true
-cmdsTxt.Text = "CORE\n;fly ;unfly ;speed 50 ;jump 80 ;god ;ungod\n;noclip ;clip ;spin 20 ;unspin ;tp bacon\n;bring bacon ;fling bacon ;reset ;sit\n\nSURVIVAL (NDS fix)\n;survive ;unsurvive ;anchor ;unanchor\n;antifling ;noantifling\n\nPHYSICS\n;blackhole [player] ;unblackhole\n;tornado [player] ;untornado\n;tsunami ;untsunami\n;orbit [player] ;fountain ;rain ;magnet [player]\n;launch ;quake ;explode ;swirl ;stop\n\nSOCIAL (fixed)\n;hug [player/nearest] ;unhug\n;backpack [player] ;unbackpack\n;headsit [player] ;unheadsit\n;headless ;unheadless\n\nANIM (everyone sees)\n;zombie ;unzombie\n\nEMOTES\n;dance ;dance2 ;dance3 ;floss ;shuffle ;dab\n;wave ;point ;cheer ;laugh ;cry ;bow\n;salute ;think ;shy ;clap ;sleep ;sit ;lay\n;stopemote"
+cmdsTxt.Text = "CORE\n;fly ;unfly ;speed 50 ;jump 80 ;god ;ungod\n;noclip ;clip ;spin 20 ;unspin ;tp bacon\n;bring bacon ;fling bacon ;reset ;sit\n\nSURVIVAL (NDS fix)\n;survive ;unsurvive ;anchor ;unanchor\n;antifling ;noantifling\n\nPHYSICS\n;blackhole [player] ;unblackhole\n;tornado [player] ;untornado\n;tsunami ;untsunami\n;orbit [player] ;fountain ;rain ;magnet [player]\n;launch ;quake ;explode ;swirl ;stop\n\nSOCIAL (fixed)\n;hug [player/nearest] ;unhug\n;backpack [player] ;unbackpack\n;headsit [player] ;unheadsit\n;headless ;unheadless\n\nWAND\n;wand ;unwand ;throw\n\nANIM (everyone sees)\n;zombie ;unzombie\n\nEMOTES\n;dance ;dance2 ;dance3 ;floss ;shuffle ;dab\n;wave ;point ;cheer ;laugh ;cry ;bow\n;salute ;think ;shy ;clap ;sleep ;sit ;lay\n;stopemote"
 cmdsTxt.Parent = cmdsFrame
+local CmdsTemplate = cmdsTxt.Text
+local function refreshCmds()
+	if CmdsTemplate then
+		cmdsTxt.Text = CmdsTemplate:gsub(";", PREFIX)
+	end
+end
 
 local cmdsOpen = false
 local function toggleCmds()
@@ -1313,6 +1326,232 @@ local function stopAll()
 	notify("Stopped everything")
 end
 
+-- ================= PREFIX CHANGE =================
+local function setPrefix(newP)
+	if not newP or #newP ~= 1 then
+		notify("Use ;prefix <one symbol> - like ;prefix !  or ;prefix ?")
+		return
+	end
+	if not PREFIXES[newP] then
+		notify("Pick one of ; ! / ? . :  - like ;prefix !")
+		return
+	end
+	PREFIX = newP
+	barBox.PlaceholderText = PREFIX .. "blackhole me  " .. PREFIX .. "hug bacon  " .. PREFIX .. "dance"
+	refreshCmds()
+	notify("Prefix is now '" .. PREFIX .. "' - try " .. PREFIX .. "cmds  or  " .. PREFIX .. "fly")
+end
+
+-- ================= ANTH WAND =================
+-- Tool in your Backpack. Equip it, tap / click a loose part to grab it,
+-- move your mouse / camera / tap elsewhere to drag it around, tap again
+-- to drop it. Works on unanchored parts you have network ownership of.
+-- Anchored parts and other players' bodies cannot be grabbed.
+local WandTool = nil
+local WandGrabbed = nil
+local WandBox = nil
+local WandEquipped = false
+local WandWanted = false
+local WandLoopConn = nil
+
+local function isCharPart(part)
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr.Character and part:IsDescendantOf(plr.Character) then
+			return true
+		end
+	end
+	return false
+end
+
+local function releaseWand()
+	if WandGrabbed then
+		pcall(function()
+			WandGrabbed.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+			WandGrabbed.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+		end)
+	end
+	if WandBox then
+		WandBox:Destroy()
+		WandBox = nil
+	end
+	WandGrabbed = nil
+end
+
+local function tryGrabWand()
+	local mouse = LocalPlayer:GetMouse()
+	local hitPos = nil
+	local target = nil
+	pcall(function()
+		target = mouse.Target
+		hitPos = mouse.Hit.Position
+	end)
+	local myHRP = getHRP()
+	if not hitPos and myHRP then
+		hitPos = myHRP.Position
+	end
+	if not hitPos then
+		notify("Wand: tap a part first")
+		return
+	end
+	local pick = nil
+	if target and target:IsA("BasePart") and not target.Anchored and not isCharPart(target) then
+		pick = target
+	end
+	if not pick then
+		local bestD = 30
+		for _, part in ipairs(getUnanchored()) do
+			if not isCharPart(part) then
+				local d = (part.Position - hitPos).Magnitude
+				if d < bestD then
+					bestD = d
+					pick = part
+				end
+			end
+		end
+	end
+	if not pick then
+		notify("Wand: no loose part there - tap closer to a part (anchored parts cannot be grabbed)")
+		return
+	end
+	WandGrabbed = pick
+	local box = Instance.new("SelectionBox")
+	box.Adornee = pick
+	box.Color3 = NEON
+	box.LineThickness = 0.05
+	box.Parent = pick
+	WandBox = box
+	notify("Wand grabbed: " .. pick.Name .. " - move mouse / camera to drag, tap again to drop, " .. PREFIX .. "throw to throw it")
+end
+
+local function startWandLoop()
+	if WandLoopConn then
+		return
+	end
+	WandLoopConn = RunService.Heartbeat:Connect(function()
+		if not WandGrabbed or not WandEquipped then
+			return
+		end
+		if not WandGrabbed.Parent then
+			releaseWand()
+			return
+		end
+		local mouse = LocalPlayer:GetMouse()
+		local targetPos = nil
+		pcall(function()
+			targetPos = mouse.Hit.Position
+		end)
+		if not targetPos then
+			local cam = Workspace.CurrentCamera
+			local hrp = getHRP()
+			if cam and hrp then
+				targetPos = cam.CFrame.Position + cam.CFrame.LookVector * 12
+			else
+				return
+			end
+		end
+		local hrp = getHRP()
+		if hrp and (targetPos - hrp.Position).Magnitude > 60 then
+			targetPos = hrp.Position + (targetPos - hrp.Position).Unit * 60
+		end
+		local off = targetPos - WandGrabbed.Position
+		if off.Magnitude < 0.5 then
+			pcall(function()
+				WandGrabbed.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+			end)
+			return
+		end
+		local vel = off * 8
+		if vel.Magnitude > 100 then
+			vel = vel.Unit * 100
+		end
+		pcall(function()
+			WandGrabbed.AssemblyLinearVelocity = vel
+			WandGrabbed.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+		end)
+	end)
+end
+
+local function giveWand()
+	WandWanted = true
+	if WandTool and WandTool.Parent then
+		notify("You already have the wand - check your Backpack / hotbar")
+		return
+	end
+	local tool = Instance.new("Tool")
+	tool.Name = "ANTH Wand"
+	tool.RequiresHandle = true
+	tool.CanBeDropped = false
+	tool.ToolTip = "Tap a loose part to grab it, tap again to drop"
+	local handle = Instance.new("Part")
+	handle.Name = "Handle"
+	handle.Size = Vector3.new(0.25, 1.6, 0.25)
+	handle.Color = NEON
+	handle.Material = Enum.Material.Neon
+	handle.CanCollide = false
+	handle.CanQuery = false
+	handle.Parent = tool
+	local tip = Instance.new("Part")
+	tip.Name = "Tip"
+	tip.Size = Vector3.new(0.5, 0.5, 0.5)
+	tip.Shape = Enum.PartType.Ball
+	tip.Color = NEON2
+	tip.Material = Enum.Material.Neon
+	tip.CanCollide = false
+	tip.CanQuery = false
+	tip.CFrame = CFrame.new(0, 1, 0)
+	tip.Parent = tool
+	tool.Grip = CFrame.new(0, -0.5, 0) * CFrame.Angles(math.rad(45), 0, 0)
+	tool.Equipped:Connect(function()
+		WandEquipped = true
+		startWandLoop()
+		notify("Wand equipped - tap a loose part to grab it")
+	end)
+	tool.Unequipped:Connect(function()
+		WandEquipped = false
+		releaseWand()
+	end)
+	tool.Activated:Connect(function()
+		if WandGrabbed then
+			releaseWand()
+			notify("Wand dropped it")
+		else
+			tryGrabWand()
+		end
+	end)
+	tool.Parent = LocalPlayer:WaitForChild("Backpack")
+	WandTool = tool
+	notify("Wand given - equip ANTH Wand from your Backpack")
+end
+
+local function removeWand()
+	WandWanted = false
+	releaseWand()
+	WandEquipped = false
+	if WandTool then
+		WandTool:Destroy()
+		WandTool = nil
+	end
+	notify("Wand removed")
+end
+
+local function throwWand()
+	if not WandGrabbed then
+		notify("Wand: grab something first - equip wand and tap a part")
+		return
+	end
+	local cam = Workspace.CurrentCamera
+	local dir = Vector3.new(0, 0, -1)
+	if cam then
+		dir = cam.CFrame.LookVector
+	end
+	local part = WandGrabbed
+	pcall(function()
+		part.AssemblyLinearVelocity = dir * 120 + Vector3.new(0, 30, 0)
+	end)
+	releaseWand()
+	notify("Wand threw it!")
+end
+
 -- ================= HUG / BACKPACK / HEADSIT =================
 local AttachWeld = nil
 
@@ -1592,6 +1831,13 @@ local function setZombie(on)
 end
 
 LocalPlayer.CharacterAdded:Connect(function()
+	if WandWanted then
+		task.delay(1, function()
+			if WandWanted then
+				giveWand()
+			end
+		end)
+	end
 	detach()
 	task.wait(1)
 	savePose()
@@ -1771,7 +2017,7 @@ local function runCommand(raw)
 	end
 	raw = raw:gsub("^%s+", "")
 	raw = raw:gsub("%s+$", "")
-	if raw:sub(1, 1) == PREFIX then
+	if PREFIXES[raw:sub(1, 1)] then
 		raw = raw:sub(2)
 	end
 	if raw == "" then
@@ -1780,9 +2026,17 @@ local function runCommand(raw)
 	local args = split(raw)
 	local cmd = args[1]:lower()
 	table.remove(args, 1)
-	logMsg(";" .. cmd .. " " .. table.concat(args, " "))
+	logMsg(PREFIX .. cmd .. " " .. table.concat(args, " "))
 	if cmd == "cmds" or cmd == "help" or cmd == "ecmds" then
 		toggleCmds()
+	elseif cmd == "prefix" or cmd == "setprefix" or cmd == "changeprefix" then
+		setPrefix(args[1])
+	elseif cmd == "wand" then
+		giveWand()
+	elseif cmd == "unwand" then
+		removeWand()
+	elseif cmd == "throw" then
+		throwWand()
 	elseif cmd == "fly" then
 		startFly()
 	elseif cmd == "unfly" then
@@ -2004,7 +2258,7 @@ UserInputService.InputBegan:Connect(function(input, gp)
 end)
 
 LocalPlayer.Chatted:Connect(function(m)
-	if m:sub(1, 1) == PREFIX then
+	if PREFIXES[m:sub(1, 1)] then
 		runCommand(m)
 	end
 end)
