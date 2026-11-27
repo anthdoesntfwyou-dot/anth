@@ -1,4 +1,4 @@
--- ANTH HUB - v1.2 Delta
+-- ANTH HUB - v1.5 Delta
 -- Fixes: draggable logo, hug fixed, noclip restore, NDS survive,
 -- zombie (server-visible), headless re-apply, more fun physics
 -- Same unified hub, rewritten for Delta (mobile + PC)
@@ -59,6 +59,123 @@ end
 if not guiParent then
 	guiParent = LocalPlayer:WaitForChild("PlayerGui")
 end
+
+-- ================= v1.5 FIX: DUPLICATE RUNS =================
+-- Anth reported it still moved/killed him WITHOUT the wand.
+-- Audit: on a fresh load NOTHING in this script moves you - fly,
+-- noclip, god, blackhole, tornado, tsunami, fun, wand, hug are all
+-- OFF until you run a command. So the mover must be a leftover
+-- from a previous run in the SAME game:
+--  * Re-running the loadstring in Delta does NOT kill the old copy.
+--    Old Heartbeat/Stepped loops keep running, old blackhole ball,
+--    old fly BodyVelocity, old noclip (CanCollide=false forever),
+--    old hug weld all stay alive and fight the new copy.
+--  * That is why it happens "when the script activated" - each
+--    activation stacks another copy, and old noclip alone makes
+--    you fall through grass/island and die.
+--  * Infinite Yield running at the same time (seen in his video,
+--    bottom right) does the same thing - two hubs, same ; prefix.
+-- Fix here:
+--  1. Bump a global RunId. Every moving loop in v1.5 checks it and
+--     stops if a newer copy started. Old v1.4 loops do not check it,
+--     so you MUST rejoin fresh once after this update - after that,
+--     re-running is safe.
+--  2. On load, destroy the old ANTH Hub GUI, old blackhole/tornado/
+--     tsunami parts, old ANTH Wand tools, and old BodyVelocity/
+--     BodyGyro/BodyAngularVelocity in your HumanoidRootPart, and
+--     reset your character: PlatformStand off, AutoRotate on,
+--     HRP unanchored, CanCollide back on, velocity zeroed.
+--  3. Warn in the log if an old copy was found.
+local MY_RUN = 0
+pcall(function()
+	if getgenv then
+		local g = getgenv()
+		g.ANTH_Hub_RunId = (g.ANTH_Hub_RunId or 0) + 1
+		MY_RUN = g.ANTH_Hub_RunId
+	else
+		_G.ANTH_Hub_RunId = (_G.ANTH_Hub_RunId or 0) + 1
+		MY_RUN = _G.ANTH_Hub_RunId
+	end
+end)
+if MY_RUN == 0 then
+	MY_RUN = 1
+end
+local function isCurrentRun()
+	local cur = MY_RUN
+	pcall(function()
+		if getgenv then
+			cur = getgenv().ANTH_Hub_RunId
+		else
+			cur = _G.ANTH_Hub_RunId
+		end
+	end)
+	return cur == MY_RUN
+end
+
+local OldCopyFound = false
+pcall(function()
+	for _, g in ipairs(guiParent:GetChildren()) do
+		if g.Name == "ANTH_Hub" then
+			OldCopyFound = true
+			g:Destroy()
+		end
+	end
+end)
+pcall(function()
+	for _, o in ipairs(Workspace:GetDescendants()) do
+		if o.Name == "BlackholeCenter" or o.Name == "TornadoCenter" or o.Name == "TsunamiWall" then
+			OldCopyFound = true
+			o:Destroy()
+		end
+	end
+end)
+pcall(function()
+	local bp = LocalPlayer:FindFirstChild("Backpack")
+	if bp then
+		for _, tool in ipairs(bp:GetChildren()) do
+			if tool.Name == "ANTH Wand" then
+				tool:Destroy()
+			end
+		end
+	end
+	local c = LocalPlayer.Character
+	if c then
+		for _, tool in ipairs(c:GetChildren()) do
+			if tool.Name == "ANTH Wand" then
+				tool:Destroy()
+			end
+		end
+		local hrp = c:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			for _, mv in ipairs(hrp:GetChildren()) do
+				if mv:IsA("BodyVelocity") or mv:IsA("BodyGyro") or mv:IsA("BodyAngularVelocity") then
+					OldCopyFound = true
+					mv:Destroy()
+				end
+			end
+			hrp.Anchored = false
+			hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+			hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+		end
+		local hum = c:FindFirstChildOfClass("Humanoid")
+		if hum then
+			hum.PlatformStand = false
+			hum.AutoRotate = true
+		end
+		for _, part in ipairs(c:GetDescendants()) do
+			if part:IsA("BasePart") then
+				if part.Name == "HumanoidRootPart" then
+					part.CanCollide = false
+				else
+					part.CanCollide = true
+				end
+			end
+			if part:IsA("Weld") and part.Name == "EmoteAttach" then
+				part:Destroy()
+			end
+		end
+	end
+end)
 
 -- ================= HACKER UI =================
 local gui = Instance.new("ScreenGui")
@@ -131,7 +248,7 @@ local titleTxt = Instance.new("TextLabel")
 titleTxt.Size = UDim2.new(1, -90, 1, 0)
 titleTxt.Position = UDim2.new(0, 12, 0, 0)
 titleTxt.BackgroundTransparency = 1
-titleTxt.Text = "ANTH // TERMINAL [v1.4 DELTA]"
+titleTxt.Text = "ANTH // TERMINAL [v1.5 DELTA]"
 titleTxt.TextColor3 = NEON
 titleTxt.Font = Enum.Font.Code
 titleTxt.TextSize = 15
@@ -684,7 +801,7 @@ local function startFly()
 	flyVel.Velocity = Vector3.new(0, 0, 0)
 	flyVel.Parent = hrp
 	flyConn = RunService.Heartbeat:Connect(function()
-		if not Flying then
+		if not Flying or not isCurrentRun() then
 			return
 		end
 		local cam = Workspace.CurrentCamera
@@ -732,6 +849,9 @@ local noclipConn = nil
 local function setNoclip(on)
 	if on then
 		noclipConn = RunService.Stepped:Connect(function()
+			if not isCurrentRun() then
+				return
+			end
 			local c = getChar()
 			if c then
 				for _, p in ipairs(c:GetDescendants()) do
@@ -772,6 +892,9 @@ local function setGod(on)
 			h.Health = math.huge
 		end
 		godConn = RunService.Heartbeat:Connect(function()
+			if not isCurrentRun() then
+				return
+			end
 			local hh = getHum()
 			if hh and hh.Health < hh.MaxHealth then
 				hh.Health = hh.MaxHealth
@@ -851,6 +974,9 @@ local function setAntiFling(on)
 	end
 	if on then
 		AntiFlingConn = RunService.Heartbeat:Connect(function()
+			if not isCurrentRun() then
+				return
+			end
 			local hrp = getHRP()
 			if not hrp then
 				return
@@ -939,7 +1065,7 @@ local function startBH(t)
 	v.Parent = Workspace
 	BHPart = v
 	task.spawn(function()
-		while BHActive do
+		while BHActive and isCurrentRun() do
 			task.wait(0.03)
 			local center = nil
 			if BHTarget and BHTarget.Character then
@@ -1451,6 +1577,9 @@ local function startWandLoop()
 		return
 	end
 	WandLoopConn = RunService.Heartbeat:Connect(function()
+		if not isCurrentRun() then
+			return
+		end
 		if not WandGrabbed or not WandEquipped then
 			return
 		end
@@ -2315,5 +2444,8 @@ LocalPlayer.Chatted:Connect(function(m)
 end)
 
 savePose()
+if OldCopyFound then
+	notify("WARNING: old ANTH copy was still running - cleaned it up. REJOIN the game fresh next time instead of re-running in the same game, and do NOT run Infinite Yield at the same time.")
+end
 notify("ANTH HUB loaded - ;cmds for list, X minimises to ANTH logo")
 print("[ANTH HUB] Loaded - Delta fixed version.")
