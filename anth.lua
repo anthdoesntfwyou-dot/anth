@@ -1,4 +1,4 @@
--- ANTH HUB - v1.7 Delta
+-- ANTH HUB - v1.8 Delta
 -- Fixes: draggable logo, hug fixed, noclip restore, NDS survive,
 -- zombie (server-visible), headless re-apply, more fun physics
 -- Same unified hub, rewritten for Delta (mobile + PC)
@@ -26,6 +26,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
+local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 local PREFIX = ";"
 local PREFIXES = {}
@@ -248,7 +249,7 @@ local titleTxt = Instance.new("TextLabel")
 titleTxt.Size = UDim2.new(1, -90, 1, 0)
 titleTxt.Position = UDim2.new(0, 12, 0, 0)
 titleTxt.BackgroundTransparency = 1
-titleTxt.Text = "ANTH // TERMINAL [v1.7 DELTA]"
+titleTxt.Text = "ANTH // TERMINAL [v1.8 DELTA]"
 titleTxt.TextColor3 = NEON
 titleTxt.Font = Enum.Font.Code
 titleTxt.TextSize = 15
@@ -453,7 +454,7 @@ cmdsTxt.TextSize = 13
 cmdsTxt.TextXAlignment = Enum.TextXAlignment.Left
 cmdsTxt.TextYAlignment = Enum.TextYAlignment.Top
 cmdsTxt.TextWrapped = true
-cmdsTxt.Text = "CORE\n;fly ;unfly ;speed 50 ;jump 80 ;god ;ungod\n;noclip ;clip ;spin 20 ;unspin ;tp bacon\n;bring bacon ;fling bacon ;reset ;sit\n\nSURVIVAL (NDS fix)\n;survive ;unsurvive ;anchor ;unanchor\n;antifling ;noantifling\n\nPHYSICS\n;blackhole [player] ;unblackhole\n;tornado [player] ;untornado\n;tsunami ;untsunami\n;orbit [player] ;fountain ;rain ;magnet [player]\n;launch ;quake ;explode ;swirl ;stop\n\nSOCIAL (fixed)\n;hug [player/nearest] ;unhug\n;backpack [player] ;unbackpack\n;headsit [player] ;unheadsit\n;headless ;unheadless\n\nBOOM\n;boom ;explode\n\nWAND\n;wand ;unwand ;throw\n\nANIM (everyone sees)\n;zombie ;unzombie\n\nEMOTES\n;dance ;dance2 ;dance3 ;floss ;shuffle ;dab\n;wave ;point ;cheer ;laugh ;cry ;bow\n;salute ;think ;shy ;clap ;sleep ;sit ;lay\n;stopemote"
+cmdsTxt.Text = "CORE\n;fly ;unfly ;speed 50 ;jump 80 ;god ;ungod\n;noclip ;clip ;spin 20 ;unspin ;tp bacon\n;bring bacon ;fling bacon ;reset ;sit\n\nSURVIVAL (NDS fix)\n;survive ;unsurvive ;anchor ;unanchor\n;antifling ;noantifling\n\nPHYSICS\n;blackhole [player] ;unblackhole\n;tornado [player] ;untornado\n;tsunami ;untsunami\n;orbit [player] ;fountain ;rain ;magnet [player]\n;launch ;quake ;explode ;swirl ;stop\n\nSOCIAL (fixed)\n;hug [player/nearest] ;unhug\n;backpack [player] ;unbackpack\n;headsit [player] ;unheadsit\n;headless ;unheadless\n\nBOOM\n;boom ;explode\n\nWAND\n;wand ;unwand ;throw\n\nANIM (everyone sees)\n;zombie ;unzombie\n\nMORE PHYSICS\n;vortex [player] ;unvortex ;meteor [player]\n\nLOOKS (everyone sees)\n;invisible ;visible ;big ;tiny ;normalsize\n;fire ;smoke ;sparkles ;aura ;unfx\n\nCARRY\n;carry [player] ;uncarry\n\n;rejoin\n\nEMOTES\n;dance ;dance2 ;dance3 ;floss ;shuffle ;dab\n;wave ;point ;cheer ;laugh ;cry ;bow\n;salute ;think ;shy ;clap ;sleep ;sit ;lay\n;stopemote"
 cmdsTxt.Parent = cmdsFrame
 local CmdsTemplate = cmdsTxt.Text
 local function refreshCmds()
@@ -1368,6 +1369,20 @@ local function startFun(mode, target)
 							part.AssemblyLinearVelocity = tan.Unit * 80 + Vector3.new(0, 10, 0)
 						end)
 					end
+				elseif mode == "vortex" then
+					if d < 80 then
+						local tan = Vector3.new(-off.Z, 0, off.X)
+						if tan.Magnitude < 0.1 then
+							tan = Vector3.new(1, 0, 0)
+						end
+						local up = 45
+						if part.Position.Y > center.Y + 25 then
+							up = -15
+						end
+						pcall(function()
+							part.AssemblyLinearVelocity = tan.Unit * 90 - off.Unit * 25 + Vector3.new(0, up, 0)
+						end)
+					end
 				elseif mode == "fountain" then
 					if d < 50 and part.Position.Y < center.Y + 10 then
 						pcall(function()
@@ -1445,6 +1460,38 @@ local function doExplode()
 		end
 	end
 	notify("Explode!")
+end
+
+local function doMeteor(target)
+	local center = nil
+	if target and target.Character then
+		local th = target.Character:FindFirstChild("HumanoidRootPart")
+		if th then
+			center = th.Position
+		end
+	end
+	if not center then
+		local hrp = getHRP()
+		if hrp then
+			center = hrp.Position + hrp.CFrame.LookVector * 15
+		else
+			return
+		end
+	end
+	local count = 0
+	for _, part in ipairs(getUnanchored()) do
+		if count >= 30 then
+			break
+		end
+		if (part.Position - center).Magnitude < 80 then
+			count = count + 1
+			pcall(function()
+				part.CFrame = CFrame.new(center + Vector3.new(math.random(-25, 25), 50 + math.random(0, 20), math.random(-25, 25)))
+				part.AssemblyLinearVelocity = Vector3.new(0, -10, 0)
+			end)
+		end
+	end
+	notify("Meteor! Dropped " .. tostring(count) .. " parts on them.")
 end
 
 local function stopAll()
@@ -1876,6 +1923,11 @@ local function attachTo(target, mode)
 		notify("On " .. target.DisplayName .. "'s back - ;unbackpack to get off")
 	elseif mode == "headsit" then
 		w.C0 = CFrame.new(0, 2.9, 0)
+	elseif mode == "carry" then
+		w.C0 = CFrame.new(0, 0.5, -2) * CFrame.Angles(0, math.rad(180), 0)
+		tj("RS", CFrame.new(1, 0.5, 0) * CFrame.Angles(math.rad(-90), 0, 0), 0.4)
+		tj("LS", CFrame.new(-1, 0.5, 0) * CFrame.Angles(math.rad(-90), 0, 0), 0.4)
+		notify("Carrying " .. target.DisplayName .. " - ;uncarry to put them down")
 		tj("RH", CFrame.new(1, -1, 0) * CFrame.Angles(math.rad(-90), 0, 0), 0.4)
 		tj("LH", CFrame.new(-1, -1, 0) * CFrame.Angles(math.rad(-90), 0, 0), 0.4)
 		notify("Sitting on " .. target.DisplayName .. "'s head - ;unheadsit to get off")
@@ -2086,6 +2138,12 @@ LocalPlayer.CharacterAdded:Connect(function()
 	if HeadlessOn then
 		applyHeadless()
 	end
+	if InvisibleOn then
+		applyInvisible()
+	end
+	if SizeOn then
+		applySize()
+	end
 	if ZombieOn then
 		applyAnimPack(ZOMBIE)
 	end
@@ -2101,6 +2159,161 @@ LocalPlayer.CharacterAdded:Connect(function()
 		end
 	end
 end)
+
+-- ================= INVISIBLE / SIZE / FX - EVERYONE-SIDE =================
+-- These change YOUR OWN character, which you own, so they replicate
+-- and everyone sees them. That is why they are allowed here.
+-- ;gravity, ;freeze others, ;bring all, ;dance all were NOT added:
+-- they would need server control of other players / the world,
+-- which a client script does not have, so they would be client-only.
+local InvisibleOn = false
+local InvisibleLoopOn = false
+local function applyInvisible()
+	local c = getChar()
+	if not c then
+		return
+	end
+	for _, d in ipairs(c:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.Transparency = 1
+		elseif d:IsA("Decal") then
+			d.Transparency = 1
+		end
+	end
+end
+local function setInvisible(on)
+	InvisibleOn = on
+	if on then
+		applyInvisible()
+		notify("Invisible ON - everyone sees you vanish")
+		if not InvisibleLoopOn then
+			InvisibleLoopOn = true
+			task.spawn(function()
+				while InvisibleOn do
+					task.wait(1)
+					if InvisibleOn then
+						applyInvisible()
+					end
+				end
+				InvisibleLoopOn = false
+			end)
+		end
+	else
+		local c = getChar()
+		if c then
+			for _, d in ipairs(c:GetDescendants()) do
+				if d:IsA("BasePart") then
+					d.Transparency = 0
+				elseif d:IsA("Decal") then
+					d.Transparency = 0
+				end
+			end
+		end
+		if HeadlessOn then
+			applyHeadless()
+		end
+		notify("Visible again")
+	end
+end
+
+local SizeOn = false
+local SizeScale = 1
+local SizeLoopOn = false
+local function applySize()
+	local h = getHum()
+	if not h then
+		return
+	end
+	local bh = h:FindFirstChild("BodyHeightScale")
+	local bw = h:FindFirstChild("BodyWidthScale")
+	local bd = h:FindFirstChild("BodyDepthScale")
+	local hd = h:FindFirstChild("HeadScale")
+	if not bh then
+		return
+	end
+	pcall(function()
+		bh.Value = SizeScale
+		if bw then bw.Value = SizeScale end
+		if bd then bd.Value = SizeScale end
+		if hd then hd.Value = SizeScale end
+	end)
+end
+local function setSize(scale)
+	if scale < 0.3 then scale = 0.3 end
+	if scale > 3 then scale = 3 end
+	SizeScale = scale
+	local h = getHum()
+	if not h or not h:FindFirstChild("BodyHeightScale") then
+		notify("Size only works on R15 characters")
+		return
+	end
+	if scale == 1 then
+		SizeOn = false
+		applySize()
+		notify("Normal size")
+		return
+	end
+	SizeOn = true
+	applySize()
+	notify("Size x" .. tostring(scale) .. " - everyone sees it")
+	if not SizeLoopOn then
+		SizeLoopOn = true
+		task.spawn(function()
+			while SizeOn do
+				task.wait(2)
+				if SizeOn then
+					applySize()
+				end
+			end
+			SizeLoopOn = false
+		end)
+	end
+end
+
+local FXParts = {}
+local FXKind = nil
+local function clearFX()
+	for _, fx in ipairs(FXParts) do
+		if fx and fx.Parent then
+			fx:Destroy()
+		end
+	end
+	FXParts = {}
+	FXKind = nil
+end
+local function setFX(kind)
+	clearFX()
+	FXKind = kind
+	local c = getChar()
+	if not c then
+		return
+	end
+	local head = c:FindFirstChild("Head") or c:FindFirstChild("HumanoidRootPart")
+	if not head then
+		return
+	end
+	if kind == "fire" or kind == "aura" then
+		local f = Instance.new("Fire")
+		f.Size = 10
+		f.Heat = 10
+		f.Parent = head
+		table.insert(FXParts, f)
+	end
+	if kind == "smoke" then
+		local s = Instance.new("Smoke")
+		s.Size = 10
+		s.Opacity = 0.5
+		s.Parent = head
+		table.insert(FXParts, s)
+	end
+	if kind == "sparkles" or kind == "aura" then
+		local sp = Instance.new("Sparkles")
+		sp.SparkleColor = NEON
+		sp.Parent = head
+		table.insert(FXParts, sp)
+	end
+	notify("FX: " .. kind .. " - everyone sees it on you. ;unfx to remove")
+end
 
 -- ================= EMOTES =================
 local function doEmote(name)
@@ -2470,6 +2683,40 @@ local function runCommand(raw)
 		setZombie(false)
 	elseif cmd == "stopemote" or cmd == "unemote" then
 		stopAllEmotes()
+	elseif cmd == "vortex" then
+		startFun("vortex", getPlayer(args[1]))
+	elseif cmd == "unvortex" or cmd == "stopvortex" then
+		stopFun()
+		notify("Vortex OFF")
+	elseif cmd == "meteor" then
+		doMeteor(getPlayer(args[1]))
+	elseif cmd == "invisible" then
+		setInvisible(true)
+	elseif cmd == "visible" then
+		setInvisible(false)
+	elseif cmd == "big" then
+		setSize(2)
+	elseif cmd == "tiny" then
+		setSize(0.5)
+	elseif cmd == "normalsize" or cmd == "normalSize" then
+		setSize(1)
+	elseif cmd == "size" then
+		setSize(tonumber(args[1]) or 1)
+	elseif cmd == "carry" then
+		attachTo(getPlayer(args[1]), "carry")
+	elseif cmd == "uncarry" then
+		detach()
+		notify("Put them down")
+	elseif cmd == "fire" or cmd == "smoke" or cmd == "sparkles" or cmd == "aura" then
+		setFX(cmd)
+	elseif cmd == "unfx" or cmd == "unfire" or cmd == "unaura" then
+		clearFX()
+		notify("FX removed")
+	elseif cmd == "rejoin" then
+		pcall(function()
+			TeleportService:Teleport(game.PlaceId, LocalPlayer)
+		end)
+		notify("Rejoining...")
 	elseif cmd == "dance" or cmd == "dance2" or cmd == "dance3" or cmd == "floss" or cmd == "shuffle" or cmd == "dab" or cmd == "wave" or cmd == "point" or cmd == "cheer" or cmd == "laugh" or cmd == "cry" or cmd == "bow" or cmd == "salute" or cmd == "think" or cmd == "shy" or cmd == "clap" or cmd == "sleep" or cmd == "lay" then
 		doEmote(cmd)
 	else
