@@ -1,7 +1,10 @@
--- JAILBREAK FOR GOONERS v1.2
+-- JAILBREAK FOR GOONERS v1.3
 -- For ALEXIN5 - hypergrind, fast robbing, cop tools
 -- By Anth - Enchanted Hub style layout, mobile + PC
--- v1.1 UI: red header, pill tabs, red checkboxes, dropdowns, section separators
+-- v1.3: Alex asked for it - Auto Drive to Robbery. Turn it on, get in a car,
+-- and Auto Rob drives the car to the robbery for you instead of teleporting
+-- you on foot. It steers + throttles the VehicleSeat toward the target,
+-- and if it gets stuck for 6s it tweens the car forward in 20-stud steps.
 -- ALT ONLY. Test on your own acc first, like Alex said.
 -- HONEST ANTI-CHEAT NOTE:
 -- Jailbreak (Badimo) + Roblox Hyperion flag impossible speed,
@@ -60,6 +63,7 @@ end)
 -- ================= SETTINGS =================
 local S = {
 	AutoRob = false, AutoArrest = false, AFKGrind = false,
+	AutoDrive = false,
 	KillAura = false, TaseAura = false, ArrestAura = false,
 	Fly = false, Speed = false, Noclip = false, InfJump = false,
 	InfNitro = false, CarFly = false,
@@ -167,6 +171,122 @@ local function tpTo(key)
 	end
 end
 
+-- ================= AUTO DRIVE TO ROBBERY =================
+-- Alex's request: "where the car drives you to the robbery to auto rob"
+-- If you are seated in a car, this steers + throttles the VehicleSeat
+-- toward the target, like a real driver. If it gets stuck (not getting
+-- closer for 6s, e.g. against a wall), it tweens the whole car forward
+-- in 20-stud steps, same Safe Mode idea as safeTeleport, so it still
+-- arrives. If you are NOT in a car, it falls back to safeTeleport on foot
+-- and tells you to get in a car first. Slower than teleport, looks
+-- more legit, and you stay in the car the whole way.
+local function getVehicleSeat()
+	local hum = getHum()
+	if hum and hum.SeatPart and hum.SeatPart:IsA("VehicleSeat") then return hum.SeatPart end
+	return nil
+end
+local function getVehicleRoot(seat)
+	if not seat then return nil end
+	local vehicle = seat:FindFirstAncestorOfClass("Model")
+	if not vehicle then return nil end
+	local primary = vehicle.PrimaryPart
+	if primary then return primary, vehicle end
+	for _, p in ipairs(vehicle:GetDescendants()) do
+		if p:IsA("BasePart") then return p, vehicle end
+	end
+	return nil, vehicle
+end
+local function driveTo(pos, label)
+	local hrp = getHRP()
+	if not hrp or not pos then return false end
+	local seat = getVehicleSeat()
+	if not seat then
+		log("Auto Drive: get in a car first - walking there instead")
+		return safeTeleport(pos, label)
+	end
+	log("Auto Drive: driving to " .. tostring(label))
+	local startDist = (pos - hrp.Position).Magnitude
+	local lastDist = startDist
+	local lastProgress = os.clock()
+	local stuckTweenAt = nil
+	while isCurrentRun() do
+		local curHRP = getHRP()
+		local curSeat = getVehicleSeat()
+		if not curHRP or not curSeat then break end
+		local dist = (pos - curHRP.Position).Magnitude
+		if dist < 15 then break end
+		if dist < lastDist - 2 then
+			lastDist = dist
+			lastProgress = os.clock()
+			stuckTweenAt = nil
+		end
+		if os.clock() - lastProgress > 6 then
+			-- Stuck: tween the car forward 20 studs at a time, then resume driving
+			if not stuckTweenAt then
+				log("Auto Drive: stuck - nudging car forward")
+				stuckTweenAt = os.clock()
+				local root, vehicle = getVehicleRoot(curSeat)
+				if root then
+					local cur = root.Position
+					local stepPos = cur:Lerp(pos, math.min(20 / math.max(dist, 1), 1))
+					pcall(function()
+						if vehicle and vehicle.PrimaryPart then
+							vehicle:SetPrimaryPartCFrame(CFrame.new(stepPos + Vector3.new(0, 2, 0)))
+						else
+							root.CFrame = CFrame.new(stepPos + Vector3.new(0, 2, 0))
+						end
+					end)
+				end
+				lastProgress = os.clock()
+				task.wait(0.5)
+			end
+		else
+			-- Steer toward target in the car's local space
+			local root = getVehicleRoot(curSeat)
+			if root then
+				local dir = (pos - root.Position)
+				local localDir = root.CFrame:VectorToObjectSpace(dir)
+				local steer = 0
+				if math.abs(localDir.X) > 2 then
+					steer = math.clamp(-localDir.X / 20, -1, 1)
+				end
+				pcall(function()
+					curSeat.Throttle = 1
+					curSeat.Steer = steer
+					curSeat.MaxSpeed = 120
+				end)
+			end
+			task.wait(0.1)
+		end
+		if os.clock() - lastProgress > 30 then
+			log("Auto Drive: could not reach " .. tostring(label) .. " - stopping")
+			break
+		end
+	end
+	pcall(function()
+		local s = getVehicleSeat()
+		if s then s.Throttle = 0 s.Steer = 0 end
+	end)
+	local finalHRP = getHRP()
+	if finalHRP and (pos - finalHRP.Position).Magnitude < 25 then
+		log("Auto Drive: arrived at " .. tostring(label))
+		return true
+	end
+	log("Auto Drive: close enough, walking the last bit")
+	return safeTeleport(pos, label)
+end
+local function driveToKey(key)
+	local names = LOCATIONS[key]
+	if not names then log("No location: " .. tostring(key)) return end
+	local pos, found = findPlace(names)
+	if pos then
+		log("Driving to " .. key .. " (" .. found .. ")")
+		driveTo(pos, key)
+	else
+		log(key .. " not found in this map - drive there once")
+	end
+end
+
 local function getToolByName(part)
 	local bp = LocalPlayer:FindFirstChild("Backpack")
 	if bp then
@@ -247,7 +367,7 @@ end
 local function doOneRobbery(key)
 	if not RobTargets[key] then return end
 	log("Auto Rob: " .. key)
-	tpTo(key)
+	if S.AutoDrive then driveToKey(key) else tpTo(key) end
 	task.wait(1)
 	-- Walk around inside a bit, use prompts, collect cash
 	for i = 1, 10 do
@@ -259,7 +379,7 @@ local function doOneRobbery(key)
 	RobCount = RobCount + 1
 	log("Robbed " .. key .. " - total " .. RobCount)
 	-- Cash in at Criminal Base
-	tpTo("CriminalBase")
+	if S.AutoDrive then driveToKey("CriminalBase") else tpTo("CriminalBase") end
 	task.wait(2)
 end
 task.spawn(function()
@@ -893,6 +1013,7 @@ local function showTab(name)
 	if name == "Grind" then
 		makeSection("Auto Farm")
 		makeToggle("Auto Rob - cycle open robberies", function() return S.AutoRob end, function(v) S.AutoRob = v log("Auto Rob " .. tostring(v)) end)
+		makeToggle("Auto Drive to Robbery - car drives you there", function() return S.AutoDrive end, function(v) S.AutoDrive = v log("Auto Drive " .. tostring(v)) end)
 		makeToggle("AFK Grind - Rob if Criminal, Arrest if Cop", function() return S.AFKGrind end, function(v) S.AFKGrind = v log("AFK Grind " .. tostring(v)) end)
 		makeDropdown("Robbery Speed", {"Safe", "Normal", "Fast"}, function() if S.SafeMode then return "Safe" elseif S.FastMode then return "Fast" else return "Normal" end end, function(v) if v == "Safe" then S.SafeMode = true S.FastMode = false elseif v == "Fast" then S.FastMode = true S.SafeMode = false else S.SafeMode = false S.FastMode = false end end)
 		makeSection("Select Robberies")
@@ -907,6 +1028,7 @@ local function showTab(name)
 		makeSection("Cash In")
 		makeAction("Cash In - go to Criminal Base now", function() tpTo("CriminalBase") end)
 		makeNote("Auto Rob is fast-travel + collect. Vault puzzles / lasers still need you. Safe Mode = slow tween.")
+		makeNote("Auto Drive: get in a car first, then Auto Rob drives it to each robbery. Steers + throttles, nudges the car if stuck. Slower than teleport, looks more legit.")
 	elseif name == "Combat" then
 		makeSection("Killing")
 		makeToggle("Enable Auto Kill", function() return S.KillAura end, function(v) S.KillAura = v log("Kill Aura " .. tostring(v)) end)
@@ -945,10 +1067,15 @@ local function showTab(name)
 		makeNote("Speed over ~50 and instant teleports are what Jailbreak flags most. Keep Safe Mode ON.")
 	elseif name == "Vehicle" then
 		makeSection("Vehicle")
+		makeToggle("Auto Drive to Robbery - car drives you there", function() return S.AutoDrive end, function(v) S.AutoDrive = v log("Auto Drive " .. tostring(v)) end)
 		makeToggle("Infinite Nitro - refill nitro in your car", function() return S.InfNitro end, function(v) S.InfNitro = v log("Inf Nitro " .. tostring(v)) end)
 		makeToggle("Car Fly - lift your car (hold in car)", function() return S.CarFly end, function(v) S.CarFly = v end)
+		makeAction("Drive to Bank Now", function() driveToKey("Bank") end)
+		makeAction("Drive to Jewelry Now", function() driveToKey("Jewelry") end)
+		makeAction("Drive to Criminal Base Now", function() driveToKey("CriminalBase") end)
 		makeAction("Go to Gun Shop", function() tpTo("GunShop") end)
 		makeNote("Infinite Nitro is best-effort - it refills the Nitro value if the game exposes it.")
+		makeNote("Auto Drive needs you seated in a car. If you are on foot it walks/teleports there instead.")
 	elseif name == "ESP" then
 		makeSection("ESP")
 		makeToggle("Player ESP - name / team / distance / HP", function() return S.ESPPlayers end, function(v) S.ESPPlayers = v log("Player ESP " .. tostring(v)) end)
