@@ -1,6 +1,7 @@
--- JAILBREAK FOR GOONERS v1.0
+-- JAILBREAK FOR GOONERS v1.1
 -- For ALEXIN5 - hypergrind, fast robbing, cop tools
--- By Anth / ANTH Hub style - clean tabbed UI, mobile + PC
+-- By Anth - Enchanted Hub style layout, mobile + PC
+-- v1.1 UI: red header, pill tabs, red checkboxes, dropdowns, section separators
 -- ALT ONLY. Test on your own acc first, like Alex said.
 -- HONEST ANTI-CHEAT NOTE:
 -- Jailbreak (Badimo) + Roblox Hyperion flag impossible speed,
@@ -526,7 +527,11 @@ task.spawn(function()
 		end
 	end
 end)
--- ================= UI =================
+-- ================= UI - Enchanted Hub style =================
+-- Red header, pill tabs, red checkboxes on the left, dropdown rows
+-- with a v on the right, and --- section --- separators, just like
+-- the Enchanted Hub screenshot Alex sent. Same features, same
+-- ANTH logo minimise, just the layout he asked for.
 local guiParent = nil
 if gethui then
 	local ok, r = pcall(gethui)
@@ -542,71 +547,74 @@ local main = Instance.new("Frame")
 if isMobile then
 	main.Size = UDim2.new(0, 360, 0, 420)
 else
-	main.Size = UDim2.new(0, 460, 0, 400)
+	main.Size = UDim2.new(0, 560, 0, 420)
 end
 main.Position = UDim2.new(0.5, -main.Size.X.Offset / 2, 0.5, -main.Size.Y.Offset / 2)
-main.BackgroundColor3 = Color3.fromRGB(8, 12, 18)
+main.BackgroundColor3 = Color3.fromRGB(22, 22, 24)
 main.BorderSizePixel = 0
 main.Parent = gui
 local mainCorner = Instance.new("UICorner")
-mainCorner.CornerRadius = UDim.new(0, 12)
+mainCorner.CornerRadius = UDim.new(0, 10)
 mainCorner.Parent = main
 local mainStroke = Instance.new("UIStroke")
-mainStroke.Color = Color3.fromRGB(0, 180, 255)
-mainStroke.Thickness = 2
+mainStroke.Color = Color3.fromRGB(185, 30, 35)
+mainStroke.Thickness = 1
 mainStroke.Parent = main
+-- Red header bar
 local titleBar = Instance.new("Frame")
-titleBar.Size = UDim2.new(1, 0, 0, 40)
-titleBar.BackgroundColor3 = Color3.fromRGB(12, 20, 32)
+titleBar.Size = UDim2.new(1, 0, 0, 38)
+titleBar.BackgroundColor3 = Color3.fromRGB(185, 30, 35)
 titleBar.BorderSizePixel = 0
 titleBar.Parent = main
+local titleIcon = Instance.new("TextLabel")
+titleIcon.Size = UDim2.new(0, 26, 0, 26)
+titleIcon.Position = UDim2.new(0, 8, 0, 6)
+titleIcon.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+titleIcon.TextColor3 = Color3.fromRGB(185, 30, 35)
+titleIcon.Font = Enum.Font.GothamBold
+titleIcon.TextSize = 13
+titleIcon.Text = "JB"
+titleIcon.Parent = titleBar
+local iconCorner = Instance.new("UICorner")
+iconCorner.CornerRadius = UDim.new(0, 13)
+iconCorner.Parent = titleIcon
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -50, 1, 0)
-title.Position = UDim2.new(0, 10, 0, 0)
+title.Size = UDim2.new(1, -90, 1, 0)
+title.Position = UDim2.new(0, 42, 0, 0)
 title.BackgroundTransparency = 1
-title.TextColor3 = Color3.fromRGB(0, 200, 255)
-title.Font = Enum.Font.Code
-title.TextSize = 16
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 14
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.Text = "JAILBREAK FOR GOONERS"
+title.Text = "Jailbreak For Gooners | Public Version"
 title.Parent = titleBar
 local xBtn = Instance.new("TextButton")
-xBtn.Size = UDim2.new(0, 36, 0, 36)
-xBtn.Position = UDim2.new(1, -38, 0, 2)
-xBtn.BackgroundColor3 = Color3.fromRGB(80, 10, 10)
+xBtn.Size = UDim2.new(0, 30, 0, 30)
+xBtn.Position = UDim2.new(1, -34, 0, 4)
+xBtn.BackgroundColor3 = Color3.fromRGB(140, 20, 25)
 xBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-xBtn.Font = Enum.Font.Code
-xBtn.TextSize = 16
+xBtn.Font = Enum.Font.GothamBold
+xBtn.TextSize = 14
 xBtn.Text = "X"
 xBtn.Parent = titleBar
 local xCorner = Instance.new("UICorner")
-xCorner.CornerRadius = UDim.new(0, 8)
+xCorner.CornerRadius = UDim.new(0, 6)
 xCorner.Parent = xBtn
-local subTitle = Instance.new("TextLabel")
-subTitle.Size = UDim2.new(1, -10, 0, 18)
-subTitle.Position = UDim2.new(0, 5, 0, 44)
-subTitle.BackgroundTransparency = 1
-subTitle.TextColor3 = Color3.fromRGB(150, 200, 220)
-subTitle.Font = Enum.Font.Code
-subTitle.TextSize = 11
-subTitle.TextXAlignment = Enum.TextXAlignment.Left
-subTitle.Text = "ALT ONLY - Safe Mode ON by default - small server"
-subTitle.Parent = main
--- Tabs
-local tabNames = {"Grind", "Combat", "Cop", "Move", "Vehicle", "ESP", "Teleports"}
+-- Pill tabs
+local tabNames = {"Grind", "Combat", "Cop", "Move", "Vehicle", "ESP", "Teleports", "Stats"}
 local tabBtns = {}
 local tabBar = Instance.new("Frame")
-tabBar.Size = UDim2.new(1, -10, 0, 32)
-tabBar.Position = UDim2.new(0, 5, 0, 66)
+tabBar.Size = UDim2.new(1, -10, 0, 30)
+tabBar.Position = UDim2.new(0, 5, 0, 44)
 tabBar.BackgroundTransparency = 1
 tabBar.Parent = main
 for i, name in ipairs(tabNames) do
 	local b = Instance.new("TextButton")
-	b.Size = UDim2.new(1 / 7, -2, 1, 0)
-	b.Position = UDim2.new((i - 1) / 7, 1, 0, 0)
-	b.BackgroundColor3 = Color3.fromRGB(20, 35, 50)
-	b.TextColor3 = Color3.fromRGB(200, 230, 255)
-	b.Font = Enum.Font.Code
+	b.Size = UDim2.new(1 / 8, -3, 1, 0)
+	b.Position = UDim2.new((i - 1) / 8, 1, 0, 0)
+	b.BackgroundColor3 = Color3.fromRGB(58, 58, 62)
+	b.TextColor3 = Color3.fromRGB(210, 210, 210)
+	b.Font = Enum.Font.Gotham
 	b.TextSize = 11
 	b.Text = name
 	b.Parent = tabBar
@@ -617,9 +625,9 @@ for i, name in ipairs(tabNames) do
 end
 -- Content
 local content = Instance.new("ScrollingFrame")
-content.Size = UDim2.new(1, -10, 0, 210)
-content.Position = UDim2.new(0, 5, 0, 104)
-content.BackgroundColor3 = Color3.fromRGB(12, 18, 28)
+content.Size = UDim2.new(1, -10, 0, 268)
+content.Position = UDim2.new(0, 5, 0, 80)
+content.BackgroundColor3 = Color3.fromRGB(28, 28, 30)
 content.BorderSizePixel = 0
 content.ScrollBarThickness = 4
 content.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -629,7 +637,7 @@ local contentCorner = Instance.new("UICorner")
 contentCorner.CornerRadius = UDim.new(0, 8)
 contentCorner.Parent = content
 local contentLayout = Instance.new("UIListLayout")
-contentLayout.Padding = UDim.new(0, 6)
+contentLayout.Padding = UDim.new(0, 4)
 contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 contentLayout.Parent = content
 local contentPad = Instance.new("UIPadding")
@@ -640,10 +648,10 @@ contentPad.PaddingBottom = UDim.new(0, 6)
 contentPad.Parent = content
 -- Log
 local logLabel = Instance.new("TextLabel")
-logLabel.Size = UDim2.new(1, -10, 0, 60)
-logLabel.Position = UDim2.new(0, 5, 0, 320)
-logLabel.BackgroundColor3 = Color3.fromRGB(5, 8, 12)
-logLabel.TextColor3 = Color3.fromRGB(0, 255, 120)
+logLabel.Size = UDim2.new(1, -10, 0, 48)
+logLabel.Position = UDim2.new(0, 5, 0, 354)
+logLabel.BackgroundColor3 = Color3.fromRGB(14, 14, 16)
+logLabel.TextColor3 = Color3.fromRGB(255, 120, 120)
 logLabel.Font = Enum.Font.Code
 logLabel.TextSize = 11
 logLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -653,10 +661,10 @@ logLabel.Text = "Loaded. Pick a tab. Safe Mode ON."
 logLabel.Parent = main
 _G.JB_LogLabel = logLabel
 local statsLabel = Instance.new("TextLabel")
-statsLabel.Size = UDim2.new(1, -10, 0, 16)
-statsLabel.Position = UDim2.new(0, 5, 0, 384)
+statsLabel.Size = UDim2.new(1, -10, 0, 14)
+statsLabel.Position = UDim2.new(0, 5, 0, 404)
 statsLabel.BackgroundTransparency = 1
-statsLabel.TextColor3 = Color3.fromRGB(120, 180, 200)
+statsLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
 statsLabel.Font = Enum.Font.Code
 statsLabel.TextSize = 10
 statsLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -666,9 +674,9 @@ statsLabel.Parent = main
 local logo = Instance.new("TextButton")
 logo.Size = UDim2.new(0, 64, 0, 64)
 logo.Position = UDim2.new(0, 10, 0.5, -32)
-logo.BackgroundColor3 = Color3.fromRGB(8, 12, 18)
-logo.TextColor3 = Color3.fromRGB(0, 200, 255)
-logo.Font = Enum.Font.Code
+logo.BackgroundColor3 = Color3.fromRGB(22, 22, 24)
+logo.TextColor3 = Color3.fromRGB(255, 80, 80)
+logo.Font = Enum.Font.GothamBold
 logo.TextSize = 14
 logo.Text = "ANTH"
 logo.Visible = false
@@ -677,7 +685,7 @@ local logoCorner = Instance.new("UICorner")
 logoCorner.CornerRadius = UDim.new(0, 32)
 logoCorner.Parent = logo
 local logoStroke = Instance.new("UIStroke")
-logoStroke.Color = Color3.fromRGB(0, 200, 255)
+logoStroke.Color = Color3.fromRGB(185, 30, 35)
 logoStroke.Thickness = 2
 logoStroke.Parent = logo
 local function maximise()
@@ -698,7 +706,6 @@ UserInputService.InputBegan:Connect(function(input, gp)
 		if main.Visible then minimise() else maximise() end
 	end
 end)
--- Drag main by title bar, drag logo anywhere
 local function makeDraggable(handle, target)
 	local dragging = false
 	local dragStart = nil
@@ -724,32 +731,68 @@ local function makeDraggable(handle, target)
 end
 makeDraggable(titleBar, main)
 makeDraggable(logo, logo)
--- Toggle buttons per tab
+-- Enchanted-style rows
 local currentTab = "Grind"
 local function clearContent()
 	for _, c in ipairs(content:GetChildren()) do
 		if c:IsA("TextButton") or c:IsA("TextLabel") then c:Destroy() end
 	end
 end
-local function makeToggle(label, getFn, setFn)
+local function makeRow()
 	local b = Instance.new("TextButton")
-	b.Size = UDim2.new(1, -4, 0, 36)
-	b.BackgroundColor3 = Color3.fromRGB(20, 35, 50)
-	b.TextColor3 = Color3.fromRGB(220, 240, 255)
-	b.Font = Enum.Font.Code
+	b.Size = UDim2.new(1, -4, 0, 34)
+	b.BackgroundColor3 = Color3.fromRGB(48, 48, 52)
+	b.TextColor3 = Color3.fromRGB(235, 235, 235)
+	b.Font = Enum.Font.Gotham
 	b.TextSize = 13
 	b.TextXAlignment = Enum.TextXAlignment.Left
+	b.AutoButtonColor = true
 	b.Parent = content
 	local cc = Instance.new("UICorner")
 	cc.CornerRadius = UDim.new(0, 6)
 	cc.Parent = b
+	return b
+end
+local function makeToggle(label, getFn, setFn)
+	local b = makeRow()
+	local box = Instance.new("Frame")
+	box.Size = UDim2.new(0, 18, 0, 18)
+	box.Position = UDim2.new(0, 8, 0, 8)
+	box.BackgroundColor3 = Color3.fromRGB(48, 48, 52)
+	box.BorderSizePixel = 0
+	box.Parent = b
+	local boxStroke = Instance.new("UIStroke")
+	boxStroke.Color = Color3.fromRGB(185, 30, 35)
+	boxStroke.Thickness = 2
+	boxStroke.Parent = box
+	local boxCorner = Instance.new("UICorner")
+	boxCorner.CornerRadius = UDim.new(0, 4)
+	boxCorner.Parent = box
+	local check = Instance.new("TextLabel")
+	check.Size = UDim2.new(1, 0, 1, 0)
+	check.BackgroundTransparency = 1
+	check.TextColor3 = Color3.fromRGB(255, 255, 255)
+	check.Font = Enum.Font.GothamBold
+	check.TextSize = 13
+	check.Text = ""
+	check.Parent = box
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -36, 1, 0)
+	lbl.Position = UDim2.new(0, 34, 0, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.TextColor3 = Color3.fromRGB(235, 235, 235)
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 13
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.Text = label
+	lbl.Parent = b
 	local function refresh()
 		if getFn() then
-			b.Text = "  [ON]  " .. label
-			b.BackgroundColor3 = Color3.fromRGB(0, 80, 40)
+			box.BackgroundColor3 = Color3.fromRGB(185, 30, 35)
+			check.Text = "✓"
 		else
-			b.Text = "  [OFF]  " .. label
-			b.BackgroundColor3 = Color3.fromRGB(20, 35, 50)
+			box.BackgroundColor3 = Color3.fromRGB(48, 48, 52)
+			check.Text = ""
 		end
 	end
 	refresh()
@@ -760,27 +803,63 @@ local function makeToggle(label, getFn, setFn)
 	return b
 end
 local function makeAction(label, fn)
-	local b = Instance.new("TextButton")
-	b.Size = UDim2.new(1, -4, 0, 36)
-	b.BackgroundColor3 = Color3.fromRGB(30, 50, 70)
-	b.TextColor3 = Color3.fromRGB(0, 220, 255)
-	b.Font = Enum.Font.Code
-	b.TextSize = 13
-	b.TextXAlignment = Enum.TextXAlignment.Left
-	b.Text = "  >  " .. label
-	b.Parent = content
-	local cc = Instance.new("UICorner")
-	cc.CornerRadius = UDim.new(0, 6)
-	cc.Parent = b
+	local b = makeRow()
+	b.Text = "    " .. label
+	b.TextColor3 = Color3.fromRGB(255, 180, 180)
 	b.MouseButton1Click:Connect(function() pcall(fn) end)
 	return b
 end
+local function makeDropdown(label, options, getFn, setFn)
+	local b = makeRow()
+	local idx = 1
+	for i, v in ipairs(options) do
+		if v == getFn() then idx = i end
+	end
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -40, 1, 0)
+	lbl.Position = UDim2.new(0, 10, 0, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.TextColor3 = Color3.fromRGB(235, 235, 235)
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 13
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.Text = label .. ": " .. options[idx]
+	lbl.Parent = b
+	local arrow = Instance.new("TextLabel")
+	arrow.Size = UDim2.new(0, 30, 1, 0)
+	arrow.Position = UDim2.new(1, -30, 0, 0)
+	arrow.BackgroundTransparency = 1
+	arrow.TextColor3 = Color3.fromRGB(200, 200, 200)
+	arrow.Font = Enum.Font.GothamBold
+	arrow.TextSize = 14
+	arrow.Text = "v"
+	arrow.Parent = b
+	b.MouseButton1Click:Connect(function()
+		idx = idx + 1
+		if idx > #options then idx = 1 end
+		setFn(options[idx])
+		lbl.Text = label .. ": " .. options[idx]
+		log(label .. " -> " .. options[idx])
+	end)
+	return b
+end
+local function makeSection(text)
+	local l = Instance.new("TextLabel")
+	l.Size = UDim2.new(1, -4, 0, 22)
+	l.BackgroundTransparency = 1
+	l.TextColor3 = Color3.fromRGB(150, 150, 150)
+	l.Font = Enum.Font.Gotham
+	l.TextSize = 12
+	l.Text = "--- " .. text .. " ---"
+	l.Parent = content
+	return l
+end
 local function makeNote(text)
 	local l = Instance.new("TextLabel")
-	l.Size = UDim2.new(1, -4, 0, 30)
+	l.Size = UDim2.new(1, -4, 0, 28)
 	l.BackgroundTransparency = 1
-	l.TextColor3 = Color3.fromRGB(150, 180, 200)
-	l.Font = Enum.Font.Code
+	l.TextColor3 = Color3.fromRGB(150, 160, 170)
+	l.Font = Enum.Font.Gotham
 	l.TextSize = 11
 	l.TextXAlignment = Enum.TextXAlignment.Left
 	l.TextWrapped = true
@@ -788,19 +867,27 @@ local function makeNote(text)
 	l.Parent = content
 	return l
 end
+-- Kill / arrest method, cycled by the dropdowns
+local KillMethod = "Gun"
+local ArrestMethod = "Handcuffs"
 local function showTab(name)
 	currentTab = name
 	clearContent()
 	for n, b in pairs(tabBtns) do
 		if n == name then
-			b.BackgroundColor3 = Color3.fromRGB(0, 120, 180)
+			b.BackgroundColor3 = Color3.fromRGB(185, 30, 35)
+			b.TextColor3 = Color3.fromRGB(255, 255, 255)
 		else
-			b.BackgroundColor3 = Color3.fromRGB(20, 35, 50)
+			b.BackgroundColor3 = Color3.fromRGB(58, 58, 62)
+			b.TextColor3 = Color3.fromRGB(210, 210, 210)
 		end
 	end
 	if name == "Grind" then
-		makeToggle("Auto Rob - cycle Bank / Jewelry / Donut / Gas", function() return S.AutoRob end, function(v) S.AutoRob = v log("Auto Rob " .. tostring(v)) end)
-		makeToggle("AFK Grind - Auto Rob if Criminal, Auto Arrest if Cop", function() return S.AFKGrind end, function(v) S.AFKGrind = v log("AFK Grind " .. tostring(v)) end)
+		makeSection("Auto Farm")
+		makeToggle("Auto Rob - cycle open robberies", function() return S.AutoRob end, function(v) S.AutoRob = v log("Auto Rob " .. tostring(v)) end)
+		makeToggle("AFK Grind - Rob if Criminal, Arrest if Cop", function() return S.AFKGrind end, function(v) S.AFKGrind = v log("AFK Grind " .. tostring(v)) end)
+		makeDropdown("Robbery Speed", {"Safe", "Normal", "Fast"}, function() if S.SafeMode then return "Safe" elseif S.FastMode then return "Fast" else return "Normal" end end, function(v) if v == "Safe" then S.SafeMode = true S.FastMode = false elseif v == "Fast" then S.FastMode = true S.SafeMode = false else S.SafeMode = false S.FastMode = false end end)
+		makeSection("Select Robberies")
 		makeToggle("Rob Bank", function() return RobTargets.Bank end, function(v) RobTargets.Bank = v end)
 		makeToggle("Rob Jewelry Store", function() return RobTargets.Jewelry end, function(v) RobTargets.Jewelry = v end)
 		makeToggle("Rob Donut Shop", function() return RobTargets.Donut end, function(v) RobTargets.Donut = v end)
@@ -809,51 +896,72 @@ local function showTab(name)
 		makeToggle("Rob Power Plant", function() return RobTargets.PowerPlant end, function(v) RobTargets.PowerPlant = v end)
 		makeToggle("Rob Grocery Store", function() return RobTargets.Grocery end, function(v) RobTargets.Grocery = v end)
 		makeToggle("Rob Train", function() return RobTargets.Train end, function(v) RobTargets.Train = v end)
+		makeSection("Cash In")
 		makeAction("Cash In - go to Criminal Base now", function() tpTo("CriminalBase") end)
 		makeNote("Auto Rob is fast-travel + collect. Vault puzzles / lasers still need you. Safe Mode = slow tween.")
 	elseif name == "Combat" then
-		makeToggle("Kill Aura - shoot nearest enemy in range", function() return S.KillAura end, function(v) S.KillAura = v log("Kill Aura " .. tostring(v)) end)
+		makeSection("Killing")
+		makeToggle("Enable Auto Kill", function() return S.KillAura end, function(v) S.KillAura = v log("Kill Aura " .. tostring(v)) end)
+		makeToggle("Fast Kill", function() return S.KillAura end, function(v) S.KillAura = v end)
+		makeDropdown("Select Kill Method", {"Gun", "Taser", "Melee"}, function() return KillMethod end, function(v) KillMethod = v end)
 		makeToggle("Tase Aura - auto tase nearest criminal", function() return S.TaseAura end, function(v) S.TaseAura = v log("Tase Aura " .. tostring(v)) end)
-		makeNote("Kill Aura needs a gun in your backpack. Tase Aura needs a Taser. Range is set below in Move? No - Aura Range is 30 studs.")
+		makeSection("Single Kill")
+		makeAction("Kill Nearest Enemy Now", function()
+			local t, d = nearestEnemy(100, isCop() and "Criminal" or "Police")
+			if t then log("Target: " .. t.Name) else log("No enemy near") end
+		end)
 		makeAction("Equip Best Gun", function()
 			local g = getToolByName("Pistol") or getToolByName("Shotgun") or getToolByName("Rifle")
 			if g then equipTool(g) log("Equipped " .. g.Name) else log("No gun found") end
 		end)
+		makeNote("Kill Aura needs a gun in your backpack. Range is 30 studs.")
 	elseif name == "Cop" then
+		makeSection("Arrest")
 		makeToggle("Auto Arrest - hunt nearest Criminal", function() return S.AutoArrest end, function(v) S.AutoArrest = v log("Auto Arrest " .. tostring(v)) end)
 		makeToggle("Arrest Aura - arrest anyone within 14 studs", function() return S.ArrestAura end, function(v) S.ArrestAura = v log("Arrest Aura " .. tostring(v)) end)
+		makeDropdown("Select Arrest Method", {"Handcuffs", "Taser + Cuffs", "E Key"}, function() return ArrestMethod end, function(v) ArrestMethod = v end)
 		makeToggle("Tase Aura (cop)", function() return S.TaseAura end, function(v) S.TaseAura = v end)
+		makeSection("Cop Teleports")
 		makeAction("Go to Prison", function() tpTo("Prison") end)
 		makeAction("Go to Police Station", function() tpTo("PoliceStation") end)
 		makeNote("Auto Arrest works best as Police. If you are Criminal, switch team first.")
 	elseif name == "Move" then
+		makeSection("Movement")
 		makeToggle("Fly - WASD + Space up, Shift down", function() return S.Fly end, function(v) S.Fly = v log("Fly " .. tostring(v)) end)
 		makeToggle("Speed - WalkSpeed 32 (Safe cap)", function() return S.Speed end, function(v) S.Speed = v log("Speed " .. tostring(v)) end)
 		makeToggle("Noclip - walk through walls", function() return S.Noclip end, function(v) S.Noclip = v log("Noclip " .. tostring(v)) end)
 		makeToggle("Infinite Jump", function() return S.InfJump end, function(v) S.InfJump = v end)
-		makeToggle("SAFE MODE - slow tween teleports, low flag risk", function() return S.SafeMode end, function(v) S.SafeMode = v if v then S.FastMode = false end log("Safe Mode " .. tostring(v)) end)
+		makeSection("Safety")
+		makeToggle("SAFE MODE - slow tween, low flag risk", function() return S.SafeMode end, function(v) S.SafeMode = v if v then S.FastMode = false end log("Safe Mode " .. tostring(v)) end)
 		makeToggle("FAST MODE - instant teleport, HIGH ban risk", function() return S.FastMode end, function(v) S.FastMode = v if v then S.SafeMode = false log("WARNING: Fast Mode ON - high risk") end end)
 		makeNote("Speed over ~50 and instant teleports are what Jailbreak flags most. Keep Safe Mode ON.")
 	elseif name == "Vehicle" then
+		makeSection("Vehicle")
 		makeToggle("Infinite Nitro - refill nitro in your car", function() return S.InfNitro end, function(v) S.InfNitro = v log("Inf Nitro " .. tostring(v)) end)
 		makeToggle("Car Fly - lift your car (hold in car)", function() return S.CarFly end, function(v) S.CarFly = v end)
 		makeAction("Go to Gun Shop", function() tpTo("GunShop") end)
-		makeNote("Infinite Nitro is best-effort - it refills the Nitro value if the game exposes it. If it does nothing, your car model uses a different name.")
+		makeNote("Infinite Nitro is best-effort - it refills the Nitro value if the game exposes it.")
 	elseif name == "ESP" then
+		makeSection("ESP")
 		makeToggle("Player ESP - name / team / distance / HP", function() return S.ESPPlayers end, function(v) S.ESPPlayers = v log("Player ESP " .. tostring(v)) end)
 		makeNote("ESP is client-side only - only you see it. Blue = Police, Red = Criminal.")
 	elseif name == "Teleports" then
+		makeSection("Teleport")
 		for _, k in ipairs({"Bank", "Jewelry", "Museum", "PowerPlant", "Donut", "Gas", "Grocery", "Train", "Airport", "Ship", "OilRig", "Mansion", "Tomb", "CrownJewel", "CriminalBase", "PoliceStation", "Prison", "GunShop"}) do
 			makeAction("Teleport: " .. k, function() tpTo(k) end)
 		end
 		makeNote("Teleports use Safe Mode tween by default. Fast Mode makes them instant, and much riskier.")
+	elseif name == "Stats" then
+		makeSection("Stats")
+		makeNote("Team, Robs and Arrests update live at the bottom of the hub.")
+		makeAction("Refresh Stats Now", function() log("Robs: " .. RobCount .. " Arrests: " .. ArrestCount .. " Team: " .. myTeam()) end)
+		makeNote("Safe Mode is ON by default. Use a small server, ALT only.")
 	end
 end
 for n, b in pairs(tabBtns) do
 	b.MouseButton1Click:Connect(function() showTab(n) end)
 end
 showTab("Grind")
--- Stats updater
 task.spawn(function()
 	while true do
 		task.wait(1)
@@ -866,4 +974,4 @@ task.spawn(function()
 end)
 log("JAILBREAK FOR GOONERS loaded. Team: " .. myTeam())
 log("Safe Mode ON. Use a small server, ALT only.")
-print("[JB Gooners] v1.0 loaded")
+print("[JB Gooners] v1.1 loaded - Enchanted style UI")
