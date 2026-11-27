@@ -1,0 +1,496 @@
+-- ANTH Physics - Infinite Yield plugin
+-- Commands: ;blackhole [player] ;unblackhole ;tornado [player] ;untornado ;nuke [player]
+-- Install as an IY plugin:
+--   1. Save this file as anth-physics.iy in your executor workspace folder
+--   2. In game, load Infinite Yield, then type ;addplugin anth-physics
+--   3. Or run ;addallplugins
+-- Also works standalone: paste it in Delta and run it, it listens on ; chat.
+-- HONEST LIMIT, read this:
+-- These are NOT true server-side. No client script can own the server.
+-- They work because Roblox gives YOUR client network ownership of
+-- unanchored parts near you, and physics on those parts replicates
+-- to everyone. Parts 5000 studs away you almost certainly do NOT
+-- own, so they will not move until ownership shifts to you.
+-- 5000 studs is the range you asked for, but it will be laggy in
+-- big maps - the plugin batches parts (300 per tick) so it does
+-- not freeze your game. Same for players: other characters are
+-- owned by the server / themselves, so flinging them is best
+-- effort only, never guaranteed.
+-- NUKE BUG FIX (old ANTH Hub):
+-- Old ;nuke put 3 Explosions ON your own HRP. An Explosion you
+-- create flings YOU (you own your own character), but it does
+-- not move other players, and a single AssemblyLinearVelocity
+-- set on their HRP gets overwritten by the server. So only you
+-- exploded. New nuke: centre is 25 studs IN FRONT of you (or
+-- on the target), YOU are excluded from the fling loop, your
+-- velocity is zeroed after, and every other player in 1000
+-- studs gets velocity + BodyVelocity + spin + an Explosion at
+-- THEIR position, repeated 12 times over 1.2s.
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+local RANGE = 5000
+local NUKE_RADIUS = 1000
+local MAX_PER_TICK = 300
+
+local function getHRP()
+	local c = LocalPlayer.Character
+	if c then return c:FindFirstChild("HumanoidRootPart") end
+	return nil
+end
+local function findPlayer(name)
+	if not name or name == "" then return nil end
+	name = string.lower(name)
+	if name == "me" then return LocalPlayer end
+	if name == "nearest" or name == "closest" then
+		local hrp = getHRP()
+		if not hrp then return nil end
+		local best, bestD = nil, math.huge
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= LocalPlayer and p.Character then
+				local h = p.Character:FindFirstChild("HumanoidRootPart")
+				if h then
+					local d = (h.Position - hrp.Position).Magnitude
+					if d < bestD then bestD, best = d, p end
+				end
+			end
+		end
+		return best
+	end
+	if name == "random" then
+		local list = {}
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= LocalPlayer then table.insert(list, p) end
+		end
+		if #list > 0 then return list[math.random(1, #list)] end
+		return nil
+	end
+	for _, p in ipairs(Players:GetPlayers()) do
+		if string.sub(string.lower(p.Name), 1, #name) == name then return p end
+		if string.sub(string.lower(p.DisplayName), 1, #name) == name then return p end
+	end
+	return nil
+end
+local function getUnanchored()
+	local list = {}
+	for _, o in ipairs(Workspace:GetDescendants()) do
+		if o:IsA("BasePart") and not o.Anchored then
+			if o.Name ~= "ANTH_BHCenter" and o.Name ~= "ANTH_TORCenter" then
+				local isChar = false
+				for _, plr in ipairs(Players:GetPlayers()) do
+					if plr.Character and o:IsDescendantOf(plr.Character) then
+						isChar = true
+						break
+					end
+				end
+				if not isChar then
+					table.insert(list, o)
+				end
+			end
+		end
+	end
+	return list
+end
+local function notify(msg)
+	pcall(function()
+		game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {Text = "[ANTH Physics] " .. msg, Color = Color3.fromRGB(0, 255, 100)})
+	end)
+	print("[ANTH Physics] " .. msg)
+end
+
+-- ================= STATE =================
+local BHActive = false
+local BHTarget = nil
+local BHCenterPos = nil
+local BHPart = nil
+local RingSlots = {}
+local RingCount = 0
+local TORActive = false
+local TORTarget = nil
+local TORCenterPos = nil
+local TORPart = nil
+local PartCursor = 1
+local CachedParts = {}
+
+task.spawn(function()
+	while true do
+		task.wait(0.5)
+		CachedParts = getUnanchored()
+		PartCursor = 1
+	end
+end)
+
+local function stopBH()
+	BHActive = false
+	if BHPart then BHPart:Destroy() BHPart = nil end
+	RingSlots = {}
+	RingCount = 0
+end
+local function stopTOR()
+	TORActive = false
+	if TORPart then TORPart:Destroy() TORPart = nil end
+end
+local function startBH(target)
+	stopBH()
+	BHTarget = target
+	local hrp = getHRP()
+	if target and target.Character then
+		local th = target.Character:FindFirstChild("HumanoidRootPart")
+		if th then BHCenterPos = th.Position end
+	end
+	if not BHCenterPos then
+		if hrp then BHCenterPos = hrp.Position + hrp.CFrame.LookVector * 10 else BHCenterPos = Vector3.new(0, 10, 0) end
+	end
+	BHActive = true
+	local v = Instance.new("Part")
+	v.Name = "ANTH_BHCenter"
+	v.Anchored = true
+	v.CanCollide = false
+	v.CanQuery = false
+	v.Size = Vector3.new(6, 6, 6)
+	v.Shape = Enum.PartType.Ball
+	v.Material = Enum.Material.Neon
+	v.Color = Color3.fromRGB(5, 5, 5)
+	v.Transparency = 0.1
+	v.Parent = Workspace
+	BHPart = v
+	if target then notify("Blackhole ON - on " .. target.DisplayName .. " - 5000 studs") else notify("Blackhole ON - in front of you - 5000 studs") end
+end
+local function startTOR(target)
+	stopTOR()
+	TORTarget = target
+	local hrp = getHRP()
+	if target and target.Character then
+		local th = target.Character:FindFirstChild("HumanoidRootPart")
+		if th then TORCenterPos = th.Position end
+	end
+	if not TORCenterPos then
+		if hrp then TORCenterPos = hrp.Position + hrp.CFrame.LookVector * 12 else TORCenterPos = Vector3.new(0, 10, 0) end
+	end
+	TORActive = true
+	local v = Instance.new("Part")
+	v.Name = "ANTH_TORCenter"
+	v.Anchored = true
+	v.CanCollide = false
+	v.CanQuery = false
+	v.Size = Vector3.new(10, 120, 10)
+	v.Shape = Enum.PartType.Cylinder
+	v.Material = Enum.Material.Neon
+	v.Color = Color3.fromRGB(200, 200, 220)
+	v.Transparency = 0.75
+	v.Parent = Workspace
+	TORPart = v
+	if target then notify("Tornado ON - on " .. target.DisplayName .. " - 5000 studs") else notify("Tornado ON - in front of you - 5000 studs") end
+end
+
+-- One shared Heartbeat loop, batched so 5000 studs does not freeze you
+RunService.Heartbeat:Connect(function()
+	if not BHActive and not TORActive then return end
+	local bhCenter = nil
+	if BHActive then
+		if BHTarget and BHTarget.Character then
+			local th = BHTarget.Character:FindFirstChild("HumanoidRootPart")
+			if th then bhCenter = th.Position end
+		end
+		if not bhCenter then bhCenter = BHCenterPos end
+		if bhCenter and BHPart then BHPart.CFrame = CFrame.new(bhCenter) end
+	end
+	local torCenter = nil
+	if TORActive then
+		if TORTarget and TORTarget.Character then
+			local th = TORTarget.Character:FindFirstChild("HumanoidRootPart")
+			if th then torCenter = th.Position end
+		end
+		if not torCenter then torCenter = TORCenterPos end
+		if torCenter and TORPart then TORPart.CFrame = CFrame.new(torCenter + Vector3.new(0, 60, 0)) * CFrame.Angles(0, 0, math.rad(90)) end
+	end
+	local n = #CachedParts
+	if n == 0 then return end
+	local done = 0
+	while done < MAX_PER_TICK and n > 0 do
+		PartCursor = PartCursor + 1
+		if PartCursor > n then PartCursor = 1 end
+		local part = CachedParts[PartCursor]
+		done = done + 1
+		if part and part.Parent then
+			if BHActive and bhCenter then
+				local off = bhCenter - part.Position
+				local d = off.Magnitude
+				if d > 0.5 and d < RANGE then
+					-- Ring: first 80 parts that get close become the accretion ring
+					local slot = RingSlots[part]
+					if not slot and d < 60 and RingCount < 80 then
+						RingCount = RingCount + 1
+						slot = {angle = (RingCount / 80) * math.pi * 2, radius = 14 + (RingCount % 3) * 4}
+						RingSlots[part] = slot
+					end
+					if slot then
+						slot.angle = slot.angle + 0.12
+						local ringPos = bhCenter + Vector3.new(math.cos(slot.angle) * slot.radius, math.sin(slot.angle * 3) * 2, math.sin(slot.angle) * slot.radius)
+						local dir = ringPos - part.Position
+						if dir.Magnitude > 0.5 then
+							pcall(function() part.AssemblyLinearVelocity = dir.Unit * 90 end)
+						end
+					else
+						local strength = math.clamp(220 - d * 0.03, 50, 200)
+						local vel = off.Unit * strength
+						local tan = Vector3.new(-off.Z, 0, off.X)
+						if tan.Magnitude > 0.1 then vel = vel + tan.Unit * 45 end
+						if d < 8 then vel = tan.Unit * 80 + Vector3.new(0, 30, 0) end
+						pcall(function() part.AssemblyLinearVelocity = vel end)
+					end
+				end
+			end
+			if TORActive and torCenter then
+				local off = part.Position - torCenter
+				local flat = Vector3.new(off.X, 0, off.Z).Magnitude
+				local height = off.Y
+				if flat < RANGE and height > -20 and height < 150 then
+					local wantRadius = 6 + math.max(height, 0) * 0.4
+					local tan = Vector3.new(-off.Z, 0, off.X)
+					if tan.Magnitude < 0.1 then tan = Vector3.new(1, 0, 0) end
+					tan = tan.Unit
+					local inw = Vector3.new(0, 0, 0)
+					if flat > wantRadius + 2 then
+						inw = Vector3.new(-off.X, 0, -off.Z).Unit * 50
+					elseif flat < wantRadius - 2 then
+						inw = Vector3.new(off.X, 0, off.Z).Unit * 20
+					end
+					local up = 60
+					if height > 110 then up = -30 end
+					pcall(function() part.AssemblyLinearVelocity = tan * 90 + inw + Vector3.new(0, up, 0) end)
+				end
+			end
+		end
+	end
+end)
+
+local function flingPlayersFrom(pos, radius, power)
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer and plr.Character then
+			local ph = plr.Character:FindFirstChild("HumanoidRootPart")
+			if ph then
+				local off = ph.Position - pos
+				local d = off.Magnitude
+				if d < radius then
+					local dir = Vector3.new(0, 1, 0)
+					if d > 0.5 then dir = off.Unit end
+					-- Repeat 12 times: a single set gets overwritten by the server
+					task.spawn(function()
+						for i = 1, 12 do
+							pcall(function()
+								ph.AssemblyLinearVelocity = dir * power + Vector3.new(0, power * 0.7, 0)
+								local bv = ph:FindFirstChild("ANTH_NukeBV")
+								if not bv then
+									bv = Instance.new("BodyVelocity")
+									bv.Name = "ANTH_NukeBV"
+									bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+									bv.Parent = ph
+								end
+								bv.Velocity = dir * power + Vector3.new(0, power * 0.7, 0)
+								local av = ph:FindFirstChild("ANTH_NukeAV")
+								if not av then
+									av = Instance.new("BodyAngularVelocity")
+									av.Name = "ANTH_NukeAV"
+									av.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+									av.AngularVelocity = Vector3.new(0, 150, 0)
+									av.Parent = ph
+								end
+							end)
+							task.wait(0.1)
+						end
+						task.wait(1)
+						pcall(function()
+							local bv = ph:FindFirstChild("ANTH_NukeBV")
+							if bv then bv:Destroy() end
+							local av = ph:FindFirstChild("ANTH_NukeAV")
+							if av then av:Destroy() end
+						end)
+					end)
+					-- Explosion AT them, not at you
+					pcall(function()
+						local ex = Instance.new("Explosion")
+						ex.Position = ph.Position
+						ex.BlastRadius = 20
+						ex.BlastPressure = 1000000
+						ex.DestroyJointRadiusPercent = 1
+						ex.Parent = Workspace
+					end)
+				end
+			end
+		end
+	end
+end
+
+local function doNuke(target)
+	local hrp = getHRP()
+	local c = nil
+	if target and target.Character then
+		local th = target.Character:FindFirstChild("HumanoidRootPart")
+		if th then c = th.Position end
+	end
+	if not c then
+		if hrp then c = hrp.Position + hrp.CFrame.LookVector * 25 else c = Vector3.new(0, 10, 0) end
+	end
+	-- Big flash, centred on the blast, NOT on you
+	local flash = Instance.new("Part")
+	flash.Name = "ANTH_NukeFlash"
+	flash.Anchored = true
+	flash.CanCollide = false
+	flash.CanQuery = false
+	flash.Size = Vector3.new(10, 10, 10)
+	flash.Shape = Enum.PartType.Ball
+	flash.Material = Enum.Material.Neon
+	flash.Color = Color3.fromRGB(255, 140, 0)
+	flash.CFrame = CFrame.new(c)
+	flash.Parent = Workspace
+	task.spawn(function()
+		for i = 1, 10 do
+			if not flash.Parent then break end
+			flash.Size = Vector3.new(10 + i * 20, 10 + i * 20, 10 + i * 20)
+			flash.Transparency = i / 10
+			task.wait(0.05)
+		end
+		flash:Destroy()
+	end)
+	for i = 1, 3 do
+		local ex = Instance.new("Explosion")
+		ex.Position = c + Vector3.new((i - 2) * 15, 0, 0)
+		ex.BlastRadius = 100
+		ex.BlastPressure = 1000000
+		ex.DestroyJointRadiusPercent = 1
+		ex.Parent = Workspace
+	end
+	for _, part in ipairs(getUnanchored()) do
+		local off = part.Position - c
+		if off.Magnitude < NUKE_RADIUS then
+			local dir = Vector3.new(0, 1, 0)
+			if off.Magnitude > 0.5 then dir = off.Unit end
+			pcall(function()
+				part.AssemblyLinearVelocity = dir * 400 + Vector3.new(0, 250, 0)
+				part.AssemblyAngularVelocity = Vector3.new(math.random(-60, 60), math.random(-60, 60), math.random(-60, 60))
+			end)
+		end
+	end
+	flingPlayersFrom(c, NUKE_RADIUS, 400)
+	-- You are excluded above, and your velocity is zeroed so the blast does not fling you
+	local myHRP = getHRP()
+	if myHRP then
+		task.delay(0.2, function()
+			pcall(function() myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
+		end)
+	end
+	if target then notify("NUKE on " .. target.DisplayName .. " - 1000 studs") else notify("NUKE! 1000 studs - centred 25 studs ahead of you, NOT on you") end
+end
+
+-- ================= IY PLUGIN TABLE =================
+local Plugin = {
+	PluginName = "ANTH Physics",
+	PluginDescription = "Blackhole (5000 studs, ring), Tornado (5000 studs, funnel), Nuke (1000 studs, fixed self-fling).",
+	Commands = {
+		["blackhole [player]"] = {
+			ListName = "blackhole [player]",
+			Description = "Pull all unanchored parts in 5000 studs into a blackhole, with a ring made of parts. ;unblackhole to stop.",
+			Aliases = {"bh"},
+			Function = function(args, speaker)
+				local t = nil
+				if args and args[1] then t = findPlayer(args[1]) end
+				startBH(t)
+			end,
+		},
+		["unblackhole"] = {
+			ListName = "unblackhole",
+			Description = "Stop the blackhole.",
+			Aliases = {"unbh", "stopbh"},
+			Function = function(args, speaker)
+				stopBH()
+				notify("Blackhole OFF")
+			end,
+		},
+		["tornado [player]"] = {
+			ListName = "tornado [player]",
+			Description = "Pull all unanchored parts in 5000 studs into a tornado funnel. ;untornado to stop.",
+			Aliases = {"tor"},
+			Function = function(args, speaker)
+				local t = nil
+				if args and args[1] then t = findPlayer(args[1]) end
+				startTOR(t)
+			end,
+		},
+		["untornado"] = {
+			ListName = "untornado",
+			Description = "Stop the tornado.",
+			Aliases = {"untor", "stoptor"},
+			Function = function(args, speaker)
+				stopTOR()
+				notify("Tornado OFF")
+			end,
+		},
+		["nuke [player]"] = {
+			ListName = "nuke [player]",
+			Description = "1000 stud blast. Flings parts and players in 1000 studs. Centred ahead of you, not on you.",
+			Aliases = {},
+			Function = function(args, speaker)
+				local t = nil
+				if args and args[1] then t = findPlayer(args[1]) end
+				doNuke(t)
+			end,
+		},
+		["stopphysics"] = {
+			ListName = "stopphysics",
+			Description = "Stop blackhole and tornado.",
+			Aliases = {"stopallphysics"},
+			Function = function(args, speaker)
+				stopBH()
+				stopTOR()
+				notify("Physics stopped")
+			end,
+		},
+	},
+}
+
+-- Fallback: if run standalone in Delta (not via IY ;addplugin), listen on ; chat
+task.spawn(function()
+	task.wait(1)
+	local alreadyIY = false
+	pcall(function()
+		if getgenv and getgenv().IY then alreadyIY = true end
+	end)
+	if alreadyIY then return end
+	LocalPlayer.Chatted:Connect(function(msg)
+		if string.sub(msg, 1, 1) ~= ";" then return end
+		local parts = {}
+		for w in string.gmatch(string.sub(msg, 2), "%S+") do table.insert(parts, w) end
+		if #parts == 0 then return end
+		local cmd = string.lower(parts[1])
+		local arg = parts[2]
+		if cmd == "blackhole" or cmd == "bh" then
+			local t = nil
+			if arg then t = findPlayer(arg) end
+			startBH(t)
+		elseif cmd == "unblackhole" or cmd == "unbh" then
+			stopBH()
+			notify("Blackhole OFF")
+		elseif cmd == "tornado" or cmd == "tor" then
+			local t = nil
+			if arg then t = findPlayer(arg) end
+			startTOR(t)
+		elseif cmd == "untornado" or cmd == "untor" then
+			stopTOR()
+			notify("Tornado OFF")
+		elseif cmd == "nuke" then
+			local t = nil
+			if arg then t = findPlayer(arg) end
+			doNuke(t)
+		elseif cmd == "stopphysics" then
+			stopBH()
+			stopTOR()
+			notify("Physics stopped")
+		end
+	end)
+end)
+
+return Plugin
