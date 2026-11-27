@@ -1,13 +1,13 @@
--- ANTH Physics v1.1 - Infinite Yield plugin
--- Commands: ;blackhole [player] ;unblackhole ;tornado [player] ;untornado ;nuke [player]
--- Install as an IY plugin:
---   1. In Delta, BEFORE loading IY, run this one line - it writes the .iy file for you:
---      writefile("anth-physics.iy", game:HttpGet("https://raw.githubusercontent.com/anthdoesntfwyou-dot/anth/main/anth-physics.iy"))
---   2. Load Infinite Yield, then type ;addplugin anth-physics
---   3. Commands now show in IY's command list / prompt: ;blackhole ;tornado ;nuke
--- v1.1 fix: command keys were "blackhole [player]" etc, IY uses the KEY as the
--- command name, so ;blackhole never matched. Keys are now plain names, ListName
--- holds the "[player]" part. Fallback chat listener removed - IY owns the prompt now.
+-- ANTH Physics v1.2 - Infinite Yield plugin
+-- Commands: ;blackhole [player] ;unblackhole ;tornado [player] ;untornado ;nuke [player] ;wand ;throw ;ping
+-- Works in IY command prompt AND in chat with ; or / prefix.
+-- Install: run the writefile line in Delta before IY, then ;addplugin anth-physics
+-- v1.2 recheck: v1.1 removed the chat listener, so if IY did not register a
+-- command, or you typed /blackhole in chat, nothing happened at all, with no
+-- message to tell you why. v1.2 adds back a chat listener for BOTH ; and /
+-- with a 1s debounce so IY + chat do not double-run, plus ;ping and a load
+-- message so you can see the plugin actually loaded, plus a loose-part count
+-- on blackhole/tornado so you know when a map has almost nothing to pull.
 -- HONEST LIMIT, read this:
 -- These are NOT true server-side. No client script can own the server.
 -- They work because Roblox gives YOUR client network ownership of
@@ -160,7 +160,8 @@ local function startBH(target)
 	v.Transparency = 0.1
 	v.Parent = Workspace
 	BHPart = v
-	if target then notify("Blackhole ON - on " .. target.DisplayName .. " - 5000 studs") else notify("Blackhole ON - in front of you - 5000 studs") end
+	local n = #getUnanchored()
+	if target then notify("Blackhole ON - on " .. target.DisplayName .. " - pulling " .. tostring(n) .. " loose parts in 5000 studs") else notify("Blackhole ON - pulling " .. tostring(n) .. " loose parts in 5000 studs - anchored map parts will not move") end
 end
 local function startTOR(target)
 	stopTOR()
@@ -186,8 +187,137 @@ local function startTOR(target)
 	v.Transparency = 0.75
 	v.Parent = Workspace
 	TORPart = v
-	if target then notify("Tornado ON - on " .. target.DisplayName .. " - 5000 studs") else notify("Tornado ON - in front of you - 5000 studs") end
+	local n = #getUnanchored()
+	if target then notify("Tornado ON - on " .. target.DisplayName .. " - pulling " .. tostring(n) .. " loose parts in 5000 studs") else notify("Tornado ON - pulling " .. tostring(n) .. " loose parts in 5000 studs - anchored map parts will not move") end
 end
+
+-- ================= ANTH WAND =================
+local WandTool = nil
+local WandHeld = nil
+local function clearWandHold()
+	if WandHeld and WandHeld.Parent then
+		pcall(function() WandHeld.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
+	end
+	WandHeld = nil
+end
+local function giveWand()
+	if WandTool and WandTool.Parent then
+		notify("ANTH Wand - you already have it, check your backpack")
+		return
+	end
+	local tool = Instance.new("Tool")
+	tool.Name = "ANTH Wand"
+	tool.RequiresHandle = true
+	tool.CanBeDropped = false
+	local handle = Instance.new("Part")
+	handle.Name = "Handle"
+	handle.Size = Vector3.new(0.4, 0.4, 3)
+	handle.Material = Enum.Material.Neon
+	handle.Color = Color3.fromRGB(0, 255, 100)
+	handle.CanCollide = false
+	handle.Massless = true
+	handle.Parent = tool
+	local tip = Instance.new("Part")
+	tip.Name = "Tip"
+	tip.Size = Vector3.new(0.8, 0.8, 0.8)
+	tip.Shape = Enum.PartType.Ball
+	tip.Material = Enum.Material.Neon
+	tip.Color = Color3.fromRGB(0, 255, 255)
+	tip.CanCollide = false
+	tip.Massless = true
+	tip.CFrame = CFrame.new(0, 0, -1.8)
+	local weld = Instance.new("Weld")
+	weld.Part0 = handle
+	weld.Part1 = tip
+	weld.C0 = CFrame.new(0, 0, -1.8)
+	weld.Parent = handle
+	tip.Parent = tool
+	tool.Activated:Connect(function()
+		if WandHeld then
+			clearWandHold()
+			notify("Wand - dropped part")
+			return
+		end
+		local mouse = LocalPlayer:GetMouse()
+		local target = nil
+		if mouse and mouse.Target and mouse.Target:IsA("BasePart") then
+			target = mouse.Target
+		end
+		if not target or target.Anchored then
+			local hrp = getHRP()
+			if hrp then
+				local best, bestD = nil, 40
+				for _, part in ipairs(getUnanchored()) do
+					local d = (part.Position - hrp.Position).Magnitude
+					if d < bestD then bestD, best = d, part end
+				end
+				target = best
+			end
+		end
+		if not target then
+			notify("Wand - tap a loose part, or get closer to one")
+			return
+		end
+		if target.Anchored then
+			notify("Wand - that part is anchored, it will not move")
+			return
+		end
+		local isChar = false
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr.Character and target:IsDescendantOf(plr.Character) then isChar = true break end
+		end
+		if isChar then
+			notify("Wand - that is a player, not a part")
+			return
+		end
+		if target.Size.Magnitude > 8 then
+			notify("Wand - that part is too big, tap a small loose part")
+			return
+		end
+		WandHeld = target
+		notify("Wand - grabbed " .. target.Name .. " - tap again to drop, ;throw to throw it")
+	end)
+	tool.Unequipped:Connect(function() clearWandHold() end)
+	tool.Parent = LocalPlayer.Backpack
+	WandTool = tool
+	notify("ANTH Wand given - equip it, tap a small loose part to grab it, ;throw to throw it")
+end
+local function throwWand()
+	if not WandHeld or not WandHeld.Parent then
+		notify("Wand - you are not holding anything, use ;wand then tap a part")
+		return
+	end
+	local hrp = getHRP()
+	local dir = Vector3.new(0, 0, -1)
+	if hrp then dir = hrp.CFrame.LookVector end
+	local part = WandHeld
+	clearWandHold()
+	pcall(function()
+		part.AssemblyLinearVelocity = dir * 120 + Vector3.new(0, 40, 0)
+		part.AssemblyAngularVelocity = Vector3.new(math.random(-30, 30), math.random(-30, 30), math.random(-30, 30))
+	end)
+	notify("Wand - THREW " .. part.Name)
+end
+local function removeWand()
+	clearWandHold()
+	if WandTool then WandTool:Destroy() WandTool = nil end
+	notify("ANTH Wand removed")
+end
+RunService.Heartbeat:Connect(function()
+	if WandHeld and WandHeld.Parent then
+		local hrp = getHRP()
+		if hrp then
+			local want = hrp.Position + hrp.CFrame.LookVector * 8 + Vector3.new(0, 2, 0)
+			local off = want - WandHeld.Position
+			pcall(function()
+				WandHeld.AssemblyLinearVelocity = off * 12
+				WandHeld.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+			end)
+		end
+	else
+		WandHeld = nil
+	end
+end)
 
 -- One shared Heartbeat loop, batched so 5000 studs does not freeze you
 RunService.Heartbeat:Connect(function()
@@ -452,10 +582,90 @@ local Plugin = {
 				notify("Physics stopped")
 			end,
 		},
+		["ping"] = {
+			ListName = "ping",
+			Description = "Test if ANTH Physics is loaded. If this does nothing, the plugin did not load.",
+			Aliases = {},
+			Function = function(args, speaker)
+				notify("ANTH Physics v1.2 is LOADED - blackhole / tornado / nuke / wand are ready")
+			end,
+		},
+		["wand"] = {
+			ListName = "wand",
+			Description = "Give the ANTH Wand tool. Equip it, tap a small loose part to grab it, tap again to drop, ;throw to throw it.",
+			Aliases = {},
+			Function = function(args, speaker)
+				giveWand()
+			end,
+		},
+		["throw"] = {
+			ListName = "throw",
+			Description = "Throw the part the ANTH Wand is holding.",
+			Aliases = {},
+			Function = function(args, speaker)
+				throwWand()
+			end,
+		},
+		["unwand"] = {
+			ListName = "unwand",
+			Description = "Remove the ANTH Wand tool.",
+			Aliases = {},
+			Function = function(args, speaker)
+				removeWand()
+			end,
+		},
 	},
 }
 
--- IY owns the command prompt now. No standalone chat listener here,
--- or ;blackhole would run twice. Load via ;addplugin anth-physics.
+-- Chat listener for BOTH ; and / prefixes, with a 1s debounce.
+-- IY's command bar / prompt calls the Functions above directly, chat does
+-- NOT go through IY's handler in the same way, so this is the backup path.
+-- The debounce stops IY + chat running the same command twice in a row.
+local LastChatRun = {}
+local function runChatCmd(cmd, arg)
+	local key = cmd .. "|" .. (arg or "")
+	local now = os.clock()
+	if LastChatRun[key] and (now - LastChatRun[key]) < 1 then return end
+	LastChatRun[key] = now
+	local t = nil
+	if arg then t = findPlayer(arg) end
+	if cmd == "blackhole" or cmd == "bh" then
+		startBH(t)
+	elseif cmd == "unblackhole" or cmd == "unbh" or cmd == "stopbh" then
+		stopBH()
+		notify("Blackhole OFF")
+	elseif cmd == "tornado" or cmd == "tor" then
+		startTOR(t)
+	elseif cmd == "untornado" or cmd == "untor" or cmd == "stoptor" then
+		stopTOR()
+		notify("Tornado OFF")
+	elseif cmd == "nuke" then
+		doNuke(t)
+	elseif cmd == "stopphysics" or cmd == "stopallphysics" then
+		stopBH()
+		stopTOR()
+		notify("Physics stopped")
+	elseif cmd == "ping" then
+		notify("ANTH Physics v1.2 is LOADED - blackhole / tornado / nuke / wand are ready")
+	elseif cmd == "wand" then
+		giveWand()
+	elseif cmd == "throw" then
+		throwWand()
+	elseif cmd == "unwand" then
+		removeWand()
+	end
+end
+task.spawn(function()
+	task.wait(1)
+	notify("ANTH Physics v1.2 loaded - try ;ping or /ping in chat, or ;blackhole in IY")
+	LocalPlayer.Chatted:Connect(function(msg)
+		local first = string.sub(msg, 1, 1)
+		if first ~= ";" and first ~= "/" then return end
+		local parts = {}
+		for w in string.gmatch(string.sub(msg, 2), "%S+") do table.insert(parts, w) end
+		if #parts == 0 then return end
+		runChatCmd(string.lower(parts[1]), parts[2])
+	end)
+end)
 
 return Plugin
