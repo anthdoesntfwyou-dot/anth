@@ -1,10 +1,13 @@
--- ANTH Physics - Infinite Yield plugin
+-- ANTH Physics v1.1 - Infinite Yield plugin
 -- Commands: ;blackhole [player] ;unblackhole ;tornado [player] ;untornado ;nuke [player]
 -- Install as an IY plugin:
---   1. Save this file as anth-physics.iy in your executor workspace folder
---   2. In game, load Infinite Yield, then type ;addplugin anth-physics
---   3. Or run ;addallplugins
--- Also works standalone: paste it in Delta and run it, it listens on ; chat.
+--   1. In Delta, BEFORE loading IY, run this one line - it writes the .iy file for you:
+--      writefile("anth-physics.iy", game:HttpGet("https://raw.githubusercontent.com/anthdoesntfwyou-dot/anth/main/anth-physics.iy"))
+--   2. Load Infinite Yield, then type ;addplugin anth-physics
+--   3. Commands now show in IY's command list / prompt: ;blackhole ;tornado ;nuke
+-- v1.1 fix: command keys were "blackhole [player]" etc, IY uses the KEY as the
+-- command name, so ;blackhole never matched. Keys are now plain names, ListName
+-- holds the "[player]" part. Fallback chat listener removed - IY owns the prompt now.
 -- HONEST LIMIT, read this:
 -- These are NOT true server-side. No client script can own the server.
 -- They work because Roblox gives YOUR client network ownership of
@@ -391,7 +394,7 @@ local Plugin = {
 	PluginName = "ANTH Physics",
 	PluginDescription = "Blackhole (5000 studs, ring), Tornado (5000 studs, funnel), Nuke (1000 studs, fixed self-fling).",
 	Commands = {
-		["blackhole [player]"] = {
+		["blackhole"] = {
 			ListName = "blackhole [player]",
 			Description = "Pull all unanchored parts in 5000 studs into a blackhole, with a ring made of parts. ;unblackhole to stop.",
 			Aliases = {"bh"},
@@ -404,13 +407,13 @@ local Plugin = {
 		["unblackhole"] = {
 			ListName = "unblackhole",
 			Description = "Stop the blackhole.",
-			Aliases = {"unbh", "stopbh"},
+			Aliases = {"stopbh", "unbh"},
 			Function = function(args, speaker)
 				stopBH()
 				notify("Blackhole OFF")
 			end,
 		},
-		["tornado [player]"] = {
+		["tornado"] = {
 			ListName = "tornado [player]",
 			Description = "Pull all unanchored parts in 5000 studs into a tornado funnel. ;untornado to stop.",
 			Aliases = {"tor"},
@@ -423,13 +426,13 @@ local Plugin = {
 		["untornado"] = {
 			ListName = "untornado",
 			Description = "Stop the tornado.",
-			Aliases = {"untor", "stoptor"},
+			Aliases = {"stoptor", "untor"},
 			Function = function(args, speaker)
 				stopTOR()
 				notify("Tornado OFF")
 			end,
 		},
-		["nuke [player]"] = {
+		["nuke"] = {
 			ListName = "nuke [player]",
 			Description = "1000 stud blast. Flings parts and players in 1000 studs. Centred ahead of you, not on you.",
 			Aliases = {},
@@ -452,45 +455,7 @@ local Plugin = {
 	},
 }
 
--- Fallback: if run standalone in Delta (not via IY ;addplugin), listen on ; chat
-task.spawn(function()
-	task.wait(1)
-	local alreadyIY = false
-	pcall(function()
-		if getgenv and getgenv().IY then alreadyIY = true end
-	end)
-	if alreadyIY then return end
-	LocalPlayer.Chatted:Connect(function(msg)
-		if string.sub(msg, 1, 1) ~= ";" then return end
-		local parts = {}
-		for w in string.gmatch(string.sub(msg, 2), "%S+") do table.insert(parts, w) end
-		if #parts == 0 then return end
-		local cmd = string.lower(parts[1])
-		local arg = parts[2]
-		if cmd == "blackhole" or cmd == "bh" then
-			local t = nil
-			if arg then t = findPlayer(arg) end
-			startBH(t)
-		elseif cmd == "unblackhole" or cmd == "unbh" then
-			stopBH()
-			notify("Blackhole OFF")
-		elseif cmd == "tornado" or cmd == "tor" then
-			local t = nil
-			if arg then t = findPlayer(arg) end
-			startTOR(t)
-		elseif cmd == "untornado" or cmd == "untor" then
-			stopTOR()
-			notify("Tornado OFF")
-		elseif cmd == "nuke" then
-			local t = nil
-			if arg then t = findPlayer(arg) end
-			doNuke(t)
-		elseif cmd == "stopphysics" then
-			stopBH()
-			stopTOR()
-			notify("Physics stopped")
-		end
-	end)
-end)
+-- IY owns the command prompt now. No standalone chat listener here,
+-- or ;blackhole would run twice. Load via ;addplugin anth-physics.
 
 return Plugin
