@@ -1,4 +1,4 @@
--- ANTH HUB - v1.9 Delta
+-- ANTH HUB - v1.10 Delta
 -- Fixes: draggable logo, hug fixed, noclip restore, NDS survive,
 -- zombie (server-visible), headless re-apply, more fun physics
 -- Same unified hub, rewritten for Delta (mobile + PC)
@@ -227,9 +227,9 @@ main.Name = "Main"
 main.AnchorPoint = Vector2.new(0.5, 0.5)
 main.Position = UDim2.new(0.5, 0, 0.5, 0)
 if IS_MOBILE then
-	main.Size = UDim2.new(0.94, 0, 0, 540)
+	main.Size = UDim2.new(0.94, 0, 0, 420)
 else
-	main.Size = UDim2.new(0, 500, 0, 520)
+	main.Size = UDim2.new(0, 500, 0, 400)
 end
 main.BackgroundColor3 = BG
 main.BorderSizePixel = 0
@@ -249,7 +249,7 @@ local titleTxt = Instance.new("TextLabel")
 titleTxt.Size = UDim2.new(1, -90, 1, 0)
 titleTxt.Position = UDim2.new(0, 12, 0, 0)
 titleTxt.BackgroundTransparency = 1
-titleTxt.Text = "ANTH // TERMINAL [v1.9 DELTA]"
+titleTxt.Text = "ANTH // TERMINAL [v1.10 DELTA]"
 titleTxt.TextColor3 = NEON
 titleTxt.Font = Enum.Font.Code
 titleTxt.TextSize = 15
@@ -278,9 +278,23 @@ local function minimise()
 	logo.Visible = true
 end
 
+local function centerHub()
+	main.Position = UDim2.new(0.5, 0, 0.5, 0)
+end
 local function maximise()
 	main.Visible = true
 	logo.Visible = false
+	-- v1.10 fix: if the hub was dragged off-screen (title unreachable),
+	-- snap it back to centre so you can move it again.
+	local cam = Workspace.CurrentCamera
+	if cam then
+		local vs = cam.ViewportSize
+		local absPos = main.AbsolutePosition
+		local absSize = main.AbsoluteSize
+		if absPos.Y < -10 or absPos.Y > vs.Y - 50 or absPos.X < -absSize.X + 50 or absPos.X > vs.X - 50 then
+			centerHub()
+		end
+	end
 end
 
 xBtn.MouseButton1Click:Connect(minimise)
@@ -327,7 +341,23 @@ UserInputService.InputChanged:Connect(function(input)
 	if dragging then
 		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
 			local delta = input.Position - dragStart
-			main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+			local newPos = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+			-- v1.10 fix: clamp so the title bar always stays on-screen.
+			-- Without this you could drag the hub up until the title
+			-- was off-screen, then you could not grab it to move it back.
+			local cam = Workspace.CurrentCamera
+			if cam then
+				local vs = cam.ViewportSize
+				local halfW = main.AbsoluteSize.X / 2
+				local halfH = main.AbsoluteSize.Y / 2
+				local cx = newPos.X.Scale * vs.X + newPos.X.Offset
+				local cy = newPos.Y.Scale * vs.Y + newPos.Y.Offset
+				cx = math.clamp(cx, -halfW + 80, vs.X + halfW - 80)
+				cy = math.clamp(cy, -halfH + 50, vs.Y + halfH - 50)
+				main.Position = UDim2.new(0, cx, 0, cy)
+			else
+				main.Position = newPos
+			end
 		end
 	end
 	if logoDragging then
@@ -425,7 +455,7 @@ barBox.Parent = inputFrame
 -- suggestion bar to fill it in. This is why ;unvortex was "missing"
 -- before - it was in the list, but the list was clipped and you
 -- could not see it, and there was no way to complete a word.
-local ALL_CMDS = {"fly","unfly","speed","jump","god","ungod","noclip","clip","spin","unspin","tp","goto","bring","fling","kill","reset","sit","blackhole","unblackhole","tornado","untornado","tsunami","untsunami","orbit","unorbit","fountain","unfountain","rain","unrain","magnet","unmagnet","launch","quake","earthquake","explode","swirl","unswirl","vortex","unvortex","stopvortex","meteor","survive","unsurvive","anchor","unanchor","antifling","noantifling","nofling","hug","unhug","backpack","unbackpack","headsit","unheadsit","headless","unheadless","zombie","unzombie","normal","dance","dance2","dance3","floss","shuffle","dab","wave","point","cheer","laugh","cry","bow","salute","think","shy","clap","sleep","lay","stopemote","unemote","cmds","help","ecmds","prefix","setprefix","changeprefix","wand","unwand","throw","boom","explosion","nuke","invisible","visible","big","tiny","size","normalsize","carry","uncarry","fire","smoke","sparkles","aura","unfx","unfire","unaura","rejoin","stop","stopall","getoff"}
+local ALL_CMDS = {"fly","unfly","speed","jump","god","ungod","noclip","clip","spin","unspin","tp","goto","bring","fling","kill","reset","sit","blackhole","unblackhole","tornado","untornado","tsunami","untsunami","orbit","unorbit","fountain","unfountain","rain","unrain","magnet","unmagnet","launch","quake","earthquake","explode","swirl","unswirl","vortex","unvortex","stopvortex","meteor","survive","unsurvive","anchor","unanchor","antifling","noantifling","nofling","hug","unhug","backpack","unbackpack","headsit","unheadsit","headless","unheadless","zombie","unzombie","normal","dance","dance2","dance3","floss","shuffle","dab","wave","point","cheer","laugh","cry","bow","salute","think","shy","clap","sleep","lay","stopemote","unemote","cmds","help","ecmds","prefix","setprefix","changeprefix","wand","unwand","throw","boom","explosion","nuke","invisible","visible","big","tiny","size","normalsize","carry","uncarry","fire","smoke","sparkles","aura","unfx","unfire","unaura","rejoin","stop","stopall","getoff","center","resetui"}
 local suggestBtn = Instance.new("TextButton")
 suggestBtn.Size = UDim2.new(1, -20, 0, 28)
 suggestBtn.Position = UDim2.new(0, 10, 0, 182)
@@ -435,6 +465,7 @@ suggestBtn.Font = Enum.Font.Code
 suggestBtn.TextSize = 13
 suggestBtn.Text = ""
 suggestBtn.Visible = false
+suggestBtn.ZIndex = 10
 suggestBtn.Parent = main
 addCorner(suggestBtn, 8)
 addStroke(suggestBtn, NEON, 1)
@@ -512,7 +543,7 @@ end)
 -- Quick buttons
 local quick = Instance.new("Frame")
 quick.Size = UDim2.new(1, -20, 0, 46)
-quick.Position = UDim2.new(0, 10, 0, 214)
+quick.Position = UDim2.new(0, 10, 0, 182)
 quick.BackgroundTransparency = 1
 quick.Parent = main
 
@@ -522,8 +553,8 @@ local stopBtn = makeButton(quick, "STOP ■", UDim2.new(0.32, 0, 1, 0), UDim2.ne
 
 -- Collapsible commands list
 local cmdsFrame = Instance.new("ScrollingFrame")
-cmdsFrame.Size = UDim2.new(1, -20, 0, 200)
-cmdsFrame.Position = UDim2.new(0, 10, 0, 268)
+cmdsFrame.Size = UDim2.new(1, -20, 0, 150)
+cmdsFrame.Position = UDim2.new(0, 10, 0, 236)
 cmdsFrame.BackgroundColor3 = BG2
 cmdsFrame.BorderSizePixel = 0
 cmdsFrame.ScrollBarThickness = 3
@@ -545,7 +576,7 @@ cmdsTxt.TextSize = 13
 cmdsTxt.TextXAlignment = Enum.TextXAlignment.Left
 cmdsTxt.TextYAlignment = Enum.TextYAlignment.Top
 cmdsTxt.TextWrapped = true
-cmdsTxt.Text = "CORE\n;cmds ;help ;prefix / ;fly ;unfly ;speed 50 ;jump 80\n;god ;ungod ;noclip ;clip ;spin 20 ;unspin\n;tp bacon ;goto bacon ;bring bacon ;fling bacon\n;kill bacon ;reset ;sit ;stop ;stopall\n\nSURVIVAL (NDS fix)\n;survive ;unsurvive ;anchor ;unanchor\n;antifling ;noantifling\n\nPHYSICS - pull from everywhere\n;blackhole [player] ;unblackhole\n;tornado [player] ;untornado\n;tsunami ;untsunami\n;orbit [player] ;unorbit ;fountain ;unfountain\n;rain ;unrain ;magnet [player] ;unmagnet\n;launch ;quake ;explode ;swirl ;unswirl\n;vortex [player] ;unvortex ;stopvortex\n;meteor [player]\n\nBOOM / NUKE\n;boom [player] ;explode ;nuke\n\nSOCIAL (everyone sees)\n;hug [player/nearest] ;unhug\n;backpack [player] ;unbackpack\n;headsit [player] ;unheadsit ;getoff\n;carry [player] ;uncarry\n;headless ;unheadless\n\nWAND\n;wand ;unwand ;throw\n\nANIM (everyone sees)\n;zombie ;unzombie ;normal\n\nLOOKS (everyone sees)\n;invisible ;visible ;big ;tiny ;size 1.5 ;normalsize\n;fire ;smoke ;sparkles ;aura ;unfx\n\n;rejoin\n\nEMOTES\n;dance ;dance2 ;dance3 ;floss ;shuffle ;dab\n;wave ;point ;cheer ;laugh ;cry ;bow\n;salute ;think ;shy ;clap ;sleep ;sit ;lay\n;stopemote ;unemote"
+cmdsTxt.Text = "CORE\n;cmds ;help ;prefix / ;center ;fly ;unfly ;speed 50 ;jump 80\n;god ;ungod ;noclip ;clip ;spin 20 ;unspin\n;tp bacon ;goto bacon ;bring bacon ;fling bacon\n;kill bacon ;reset ;sit ;stop ;stopall\n\nSURVIVAL (NDS fix)\n;survive ;unsurvive ;anchor ;unanchor\n;antifling ;noantifling\n\nPHYSICS - pull from everywhere\n;blackhole [player] ;unblackhole\n;tornado [player] ;untornado\n;tsunami ;untsunami\n;orbit [player] ;unorbit ;fountain ;unfountain\n;rain ;unrain ;magnet [player] ;unmagnet\n;launch ;quake ;explode ;swirl ;unswirl\n;vortex [player] ;unvortex ;stopvortex\n;meteor [player]\n\nBOOM / NUKE\n;boom [player] ;explode ;nuke\n\nSOCIAL (everyone sees)\n;hug [player/nearest] ;unhug\n;backpack [player] ;unbackpack\n;headsit [player] ;unheadsit ;getoff\n;carry [player] ;uncarry\n;headless ;unheadless\n\nWAND\n;wand ;unwand ;throw\n\nANIM (everyone sees)\n;zombie ;unzombie ;normal\n\nLOOKS (everyone sees)\n;invisible ;visible ;big ;tiny ;size 1.5 ;normalsize\n;fire ;smoke ;sparkles ;aura ;unfx\n\n;rejoin\n\nEMOTES\n;dance ;dance2 ;dance3 ;floss ;shuffle ;dab\n;wave ;point ;cheer ;laugh ;cry ;bow\n;salute ;think ;shy ;clap ;sleep ;sit ;lay\n;stopemote ;unemote"
 cmdsTxt.Parent = cmdsFrame
 local CmdsTemplate = cmdsTxt.Text
 local function refreshCmds()
@@ -2891,6 +2922,10 @@ local function runCommand(raw)
 			TeleportService:Teleport(game.PlaceId, LocalPlayer)
 		end)
 		notify("Rejoining...")
+	elseif cmd == "center" or cmd == "resetui" then
+		centerHub()
+		maximise()
+		notify("Hub centred - you can move it again")
 	elseif cmd == "dance" or cmd == "dance2" or cmd == "dance3" or cmd == "floss" or cmd == "shuffle" or cmd == "dab" or cmd == "wave" or cmd == "point" or cmd == "cheer" or cmd == "laugh" or cmd == "cry" or cmd == "bow" or cmd == "salute" or cmd == "think" or cmd == "shy" or cmd == "clap" or cmd == "sleep" or cmd == "lay" then
 		doEmote(cmd)
 	else
