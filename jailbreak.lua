@@ -1,4 +1,4 @@
--- JAILBREAK FOR GOONERS v1.1
+-- JAILBREAK FOR GOONERS v1.2
 -- For ALEXIN5 - hypergrind, fast robbing, cop tools
 -- By Anth - Enchanted Hub style layout, mobile + PC
 -- v1.1 UI: red header, pill tabs, red checkboxes, dropdowns, section separators
@@ -545,11 +545,12 @@ gui.Parent = guiParent
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 local main = Instance.new("Frame")
 if isMobile then
-	main.Size = UDim2.new(0, 360, 0, 420)
+	main.Size = UDim2.new(0.94, 0, 0, 440)
 else
 	main.Size = UDim2.new(0, 560, 0, 420)
 end
-main.Position = UDim2.new(0.5, -main.Size.X.Offset / 2, 0.5, -main.Size.Y.Offset / 2)
+main.AnchorPoint = Vector2.new(0.5, 0.5)
+main.Position = UDim2.new(0.5, 0, 0.5, 0)
 main.BackgroundColor3 = Color3.fromRGB(22, 22, 24)
 main.BorderSizePixel = 0
 main.Parent = gui
@@ -584,9 +585,13 @@ title.Position = UDim2.new(0, 42, 0, 0)
 title.BackgroundTransparency = 1
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.Font = Enum.Font.GothamBold
-title.TextSize = 14
+title.TextSize = 13
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.Text = "Jailbreak For Gooners | Public Version"
+if isMobile then
+	title.Text = "Jailbreak For Gooners"
+else
+	title.Text = "Jailbreak For Gooners | Public Version"
+end
 title.Parent = titleBar
 local xBtn = Instance.new("TextButton")
 xBtn.Size = UDim2.new(0, 30, 0, 30)
@@ -604,14 +609,16 @@ xCorner.Parent = xBtn
 local tabNames = {"Grind", "Combat", "Cop", "Move", "Vehicle", "ESP", "Teleports", "Stats"}
 local tabBtns = {}
 local tabBar = Instance.new("Frame")
-tabBar.Size = UDim2.new(1, -10, 0, 30)
+tabBar.Size = UDim2.new(1, -10, 0, 62)
 tabBar.Position = UDim2.new(0, 5, 0, 44)
 tabBar.BackgroundTransparency = 1
 tabBar.Parent = main
 for i, name in ipairs(tabNames) do
 	local b = Instance.new("TextButton")
-	b.Size = UDim2.new(1 / 8, -3, 1, 0)
-	b.Position = UDim2.new((i - 1) / 8, 1, 0, 0)
+	local col = (i - 1) % 4
+	local row = math.floor((i - 1) / 4)
+	b.Size = UDim2.new(1 / 4, -3, 0, 29)
+	b.Position = UDim2.new(col / 4, 1, 0, row * 32)
 	b.BackgroundColor3 = Color3.fromRGB(58, 58, 62)
 	b.TextColor3 = Color3.fromRGB(210, 210, 210)
 	b.Font = Enum.Font.Gotham
@@ -625,8 +632,8 @@ for i, name in ipairs(tabNames) do
 end
 -- Content
 local content = Instance.new("ScrollingFrame")
-content.Size = UDim2.new(1, -10, 0, 268)
-content.Position = UDim2.new(0, 5, 0, 80)
+content.Size = UDim2.new(1, -10, 0, 238)
+content.Position = UDim2.new(0, 5, 0, 112)
 content.BackgroundColor3 = Color3.fromRGB(28, 28, 30)
 content.BorderSizePixel = 0
 content.ScrollBarThickness = 4
@@ -649,7 +656,7 @@ contentPad.Parent = content
 -- Log
 local logLabel = Instance.new("TextLabel")
 logLabel.Size = UDim2.new(1, -10, 0, 48)
-logLabel.Position = UDim2.new(0, 5, 0, 354)
+logLabel.Position = UDim2.new(0, 5, 0, 356)
 logLabel.BackgroundColor3 = Color3.fromRGB(14, 14, 16)
 logLabel.TextColor3 = Color3.fromRGB(255, 120, 120)
 logLabel.Font = Enum.Font.Code
@@ -692,7 +699,7 @@ local function maximise()
 	main.Visible = true
 	logo.Visible = false
 	pcall(function()
-		main.Position = UDim2.new(0.5, -main.Size.X.Offset / 2, 0.5, -main.Size.Y.Offset / 2)
+		main.Position = UDim2.new(0.5, 0, 0.5, 0)
 	end)
 end
 local function minimise()
@@ -741,6 +748,7 @@ end
 local function makeRow()
 	local b = Instance.new("TextButton")
 	b.Size = UDim2.new(1, -4, 0, 34)
+	b.Text = ""
 	b.BackgroundColor3 = Color3.fromRGB(48, 48, 52)
 	b.TextColor3 = Color3.fromRGB(235, 235, 235)
 	b.Font = Enum.Font.Gotham
@@ -974,4 +982,4 @@ task.spawn(function()
 end)
 log("JAILBREAK FOR GOONERS loaded. Team: " .. myTeam())
 log("Safe Mode ON. Use a small server, ALT only.")
-print("[JB Gooners] v1.1 loaded - Enchanted style UI")
+print("[JB Gooners] v1.2 loaded - Enchanted style UI, fixed squeeze")
