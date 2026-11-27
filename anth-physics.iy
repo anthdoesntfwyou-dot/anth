@@ -1,15 +1,18 @@
--- ANTH Physics v1.4 - Infinite Yield plugin
--- Commands: ;blackhole [player] ;unblackhole ;tornado [player] ;untornado ;nuke [player] ;kill [player] ;wand ;ping
+-- ANTH Physics v1.5 - Infinite Yield plugin
+-- Commands: ;blackhole [player] ;unblackhole ;tornado [player] ;untornado ;nuke [player] ;kill [player] ;wand ;ping ;stopall
 -- Works in IY command prompt AND in chat with ; or / prefix.
--- v1.4 fixes: BH/TOR were flinging YOU on NDS islands - they pulled huge island
--- parts and parts you were standing on, and pulled parts straight through you.
--- Now: parts over 20 studs are skipped, the part under your feet is skipped,
--- centre is 25 studs ahead of you (not 10), parts within 5 studs of you are
--- skipped, and your own velocity is clamped while BH/TOR run.
--- BH/TOR pull is now much stronger and instant-feeling: velocity scales with
--- distance up to 800, and parts within 200 studs are also lerped toward the
--- target each tick. Nuke now also throws parts AT the target as projectiles.
--- New: ;kill [player] slams unanchored blocks into the target fast, repeatedly.
+-- v1.5 fix for "it just did that, I did nothing": two causes.
+-- 1. DUPLICATE LOADS STACKING. Re-running ;addplugin in the same server does
+-- NOT kill the old copy. Old BH/TOR/wand loops keep running and fight the new
+-- copy, so parts keep getting pulled even when the new copy says OFF.
+-- v1.5 adds a global RunId: a new load kills old loops. Old v1.4 loops do NOT
+-- check RunId, so you MUST rejoin fresh ONCE after installing v1.5.
+-- 2. WAND HELD PART. The wand yanked a held part toward you with velocity
+-- off*12, no cap. If the part was far away that is 1000+ speed, it rockets
+-- into you and flings you off the island, and it could collide with you.
+-- Now: held part CanCollide=false while held, velocity clamped to 80,
+-- dropped if it gets more than 30 studs away.
+-- New: ;stopall stops BH + TOR + wand hold and zeroes your velocity.
 -- Install: run the writefile line in Delta before IY, then ;addplugin anth-physics
 -- v1.2 recheck: v1.1 removed the chat listener, so if IY did not register a
 -- command, or you typed /blackhole in chat, nothing happened at all, with no
@@ -43,6 +46,26 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
+
+-- RunId: a new load kills old loops. Old copies without this check keep running
+-- until you rejoin, which is why v1.4 could still fling you after a reload.
+if getgenv then
+	getgenv().ANTHPhysicsRunId = (getgenv().ANTHPhysicsRunId or 0) + 1
+end
+local RunId = 0
+if getgenv then RunId = getgenv().ANTHPhysicsRunId end
+local function isCurrentRun()
+	if not getgenv then return true end
+	return getgenv().ANTHPhysicsRunId == RunId
+end
+-- Clean up old centres on load
+pcall(function()
+	for _, o in ipairs(Workspace:GetDescendants()) do
+		if o.Name == "ANTH_BHCenter" or o.Name == "ANTH_TORCenter" or o.Name == "ANTH_NukeFlash" then
+			o:Destroy()
+		end
+	end
+end)
 
 local RANGE = 5000
 local NUKE_RADIUS = 1000
@@ -142,7 +165,7 @@ local PartCursor = 1
 local CachedParts = {}
 
 task.spawn(function()
-	while true do
+	while isCurrentRun() do
 		task.wait(0.5)
 		CachedParts = getUnanchored()
 		PartCursor = 1
@@ -250,7 +273,10 @@ local function ensureThrowButton()
 end
 local function clearWandHold()
 	if WandHeld and WandHeld.Parent then
-		pcall(function() WandHeld.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
+		pcall(function()
+			WandHeld.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+			WandHeld.CanCollide = true
+		end)
 	end
 	WandHeld = nil
 end
@@ -329,6 +355,7 @@ local function giveWand()
 			return
 		end
 		WandHeld = target
+		pcall(function() WandHeld.CanCollide = false end)
 		notify("Wand - grabbed " .. target.Name .. " - tap again to drop, tap THROW button to throw it")
 	end)
 	tool.Unequipped:Connect(function()
@@ -367,13 +394,21 @@ local function removeWand()
 	notify("ANTH Wand removed")
 end
 RunService.Heartbeat:Connect(function()
+	if not isCurrentRun() then return end
 	if WandHeld and WandHeld.Parent then
 		local hrp = getHRP()
 		if hrp then
 			local want = hrp.Position + hrp.CFrame.LookVector * 8 + Vector3.new(0, 2, 0)
 			local off = want - WandHeld.Position
+			if off.Magnitude > 30 then
+				clearWandHold()
+				notify("Wand - dropped it, it was too far away")
+				return
+			end
 			pcall(function()
-				WandHeld.AssemblyLinearVelocity = off * 12
+				local vel = off * 12
+				if vel.Magnitude > 80 then vel = vel.Unit * 80 end
+				WandHeld.AssemblyLinearVelocity = vel
 				WandHeld.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
 			end)
 		end
@@ -384,6 +419,7 @@ end)
 
 -- One shared Heartbeat loop, batched so 5000 studs does not freeze you
 RunService.Heartbeat:Connect(function()
+	if not isCurrentRun() then return end
 	if not BHActive and not TORActive then return end
 	-- SELF PROTECTION: BH/TOR must never fling you. Clamp your own velocity.
 	local myHRP = getHRP()
@@ -617,6 +653,18 @@ local function doKill(target)
 	end)
 end
 
+local function stopAll()
+	stopBH()
+	stopTOR()
+	clearWandHold()
+	if ThrowBtn then ThrowBtn.Visible = false end
+	local hrp = getHRP()
+	if hrp then
+		pcall(function() hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
+	end
+	notify("STOPPED everything - blackhole, tornado, wand hold")
+end
+
 local function doNuke(target)
 	local hrp = getHRP()
 	local c = nil
@@ -757,12 +805,20 @@ local Plugin = {
 				notify("Physics stopped")
 			end,
 		},
+		["stopall"] = {
+			ListName = "stopall",
+			Description = "Stop EVERYTHING: blackhole, tornado, wand hold, and zero your velocity. Use this if you get flung for no reason.",
+			Aliases = {},
+			Function = function(args, speaker)
+				stopAll()
+			end,
+		},
 		["ping"] = {
 			ListName = "ping",
 			Description = "Test if ANTH Physics is loaded. If this does nothing, the plugin did not load.",
 			Aliases = {},
 			Function = function(args, speaker)
-				notify("ANTH Physics v1.4 is LOADED - blackhole / tornado / nuke / kill / wand are ready")
+				notify("ANTH Physics v1.5 is LOADED - blackhole / tornado / nuke / kill / wand are ready")
 			end,
 		},
 		["wand"] = {
@@ -814,8 +870,10 @@ local function runChatCmd(cmd, arg)
 		stopBH()
 		stopTOR()
 		notify("Physics stopped")
+	elseif cmd == "stopall" then
+		stopAll()
 	elseif cmd == "ping" then
-		notify("ANTH Physics v1.4 is LOADED - blackhole / tornado / nuke / kill / wand are ready")
+		notify("ANTH Physics v1.5 is LOADED - blackhole / tornado / nuke / kill / wand are ready")
 	elseif cmd == "wand" then
 		giveWand()
 	elseif cmd == "unwand" then
@@ -824,7 +882,7 @@ local function runChatCmd(cmd, arg)
 end
 task.spawn(function()
 	task.wait(1)
-	notify("ANTH Physics v1.4 loaded - try ;ping or /ping in chat, or ;blackhole in IY")
+	notify("ANTH Physics v1.5 loaded - try ;ping or /ping in chat, or ;blackhole in IY")
 	LocalPlayer.Chatted:Connect(function(msg)
 		local first = string.sub(msg, 1, 1)
 		if first ~= ";" and first ~= "/" then return end
