@@ -1,8 +1,15 @@
--- ANTH Physics v1.3 - Infinite Yield plugin
--- Commands: ;blackhole [player] ;unblackhole ;tornado [player] ;untornado ;nuke [player] ;wand ;ping
+-- ANTH Physics v1.4 - Infinite Yield plugin
+-- Commands: ;blackhole [player] ;unblackhole ;tornado [player] ;untornado ;nuke [player] ;kill [player] ;wand ;ping
 -- Works in IY command prompt AND in chat with ; or / prefix.
--- v1.3: ;throw command REMOVED. Throw is now a small on-screen THROW button,
--- only visible while the ANTH Wand is equipped. Tap it to throw the held part.
+-- v1.4 fixes: BH/TOR were flinging YOU on NDS islands - they pulled huge island
+-- parts and parts you were standing on, and pulled parts straight through you.
+-- Now: parts over 20 studs are skipped, the part under your feet is skipped,
+-- centre is 25 studs ahead of you (not 10), parts within 5 studs of you are
+-- skipped, and your own velocity is clamped while BH/TOR run.
+-- BH/TOR pull is now much stronger and instant-feeling: velocity scales with
+-- distance up to 800, and parts within 200 studs are also lerped toward the
+-- target each tick. Nuke now also throws parts AT the target as projectiles.
+-- New: ;kill [player] slams unanchored blocks into the target fast, repeatedly.
 -- Install: run the writefile line in Delta before IY, then ;addplugin anth-physics
 -- v1.2 recheck: v1.1 removed the chat listener, so if IY did not register a
 -- command, or you typed /blackhole in chat, nothing happened at all, with no
@@ -79,20 +86,34 @@ local function findPlayer(name)
 	end
 	return nil
 end
+local function getMyFloorPart()
+	local hrp = getHRP()
+	if not hrp then return nil end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local char = LocalPlayer.Character
+	if char then params.FilterDescendantsInstances = {char} end
+	local result = Workspace:Raycast(hrp.Position, Vector3.new(0, -6, 0), params)
+	if result and result.Instance then return result.Instance end
+	return nil
+end
 local function getUnanchored()
 	local list = {}
+	local floorPart = getMyFloorPart()
 	for _, o in ipairs(Workspace:GetDescendants()) do
 		if o:IsA("BasePart") and not o.Anchored then
-			if o.Name ~= "ANTH_BHCenter" and o.Name ~= "ANTH_TORCenter" then
-				local isChar = false
-				for _, plr in ipairs(Players:GetPlayers()) do
-					if plr.Character and o:IsDescendantOf(plr.Character) then
-						isChar = true
-						break
+			if o.Name ~= "ANTH_BHCenter" and o.Name ~= "ANTH_TORCenter" and o.Name ~= "ANTH_NukeFlash" then
+				if o ~= floorPart and o.Size.Magnitude <= 20 then
+					local isChar = false
+					for _, plr in ipairs(Players:GetPlayers()) do
+						if plr.Character and o:IsDescendantOf(plr.Character) then
+							isChar = true
+							break
+						end
 					end
-				end
-				if not isChar then
-					table.insert(list, o)
+					if not isChar then
+						table.insert(list, o)
+					end
 				end
 			end
 		end
@@ -147,7 +168,7 @@ local function startBH(target)
 		if th then BHCenterPos = th.Position end
 	end
 	if not BHCenterPos then
-		if hrp then BHCenterPos = hrp.Position + hrp.CFrame.LookVector * 10 else BHCenterPos = Vector3.new(0, 10, 0) end
+		if hrp then BHCenterPos = hrp.Position + hrp.CFrame.LookVector * 25 else BHCenterPos = Vector3.new(0, 10, 0) end
 	end
 	BHActive = true
 	local v = Instance.new("Part")
@@ -174,7 +195,7 @@ local function startTOR(target)
 		if th then TORCenterPos = th.Position end
 	end
 	if not TORCenterPos then
-		if hrp then TORCenterPos = hrp.Position + hrp.CFrame.LookVector * 12 else TORCenterPos = Vector3.new(0, 10, 0) end
+		if hrp then TORCenterPos = hrp.Position + hrp.CFrame.LookVector * 25 else TORCenterPos = Vector3.new(0, 10, 0) end
 	end
 	TORActive = true
 	local v = Instance.new("Part")
@@ -364,6 +385,15 @@ end)
 -- One shared Heartbeat loop, batched so 5000 studs does not freeze you
 RunService.Heartbeat:Connect(function()
 	if not BHActive and not TORActive then return end
+	-- SELF PROTECTION: BH/TOR must never fling you. Clamp your own velocity.
+	local myHRP = getHRP()
+	if myHRP then
+		pcall(function()
+			if myHRP.AssemblyLinearVelocity.Magnitude > 60 then
+				myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+			end
+		end)
+	end
 	local bhCenter = nil
 	if BHActive then
 		if BHTarget and BHTarget.Character then
@@ -391,6 +421,12 @@ RunService.Heartbeat:Connect(function()
 		local part = CachedParts[PartCursor]
 		done = done + 1
 		if part and part.Parent then
+			-- Never pull a part that is right on top of you, it would hit you
+			local tooCloseToMe = false
+			if myHRP then
+				if (part.Position - myHRP.Position).Magnitude < 5 then tooCloseToMe = true end
+			end
+			if not tooCloseToMe then
 			if BHActive and bhCenter then
 				local off = bhCenter - part.Position
 				local d = off.Magnitude
@@ -410,12 +446,17 @@ RunService.Heartbeat:Connect(function()
 							pcall(function() part.AssemblyLinearVelocity = dir.Unit * 90 end)
 						end
 					else
-						local strength = math.clamp(220 - d * 0.03, 50, 200)
+						-- INSTANT pull: velocity scales with distance, up to 800,
+						-- plus lerp parts within 200 studs straight toward the centre
+						local strength = math.clamp(300 + d * 0.8, 200, 800)
 						local vel = off.Unit * strength
 						local tan = Vector3.new(-off.Z, 0, off.X)
-						if tan.Magnitude > 0.1 then vel = vel + tan.Unit * 45 end
+						if tan.Magnitude > 0.1 then vel = vel + tan.Unit * 60 end
 						if d < 8 then vel = tan.Unit * 80 + Vector3.new(0, 30, 0) end
 						pcall(function() part.AssemblyLinearVelocity = vel end)
+						if d < 200 and d > 8 then
+							pcall(function() part.CFrame = CFrame.new(part.Position:Lerp(bhCenter, 0.12)) end)
+						end
 					end
 				end
 			end
@@ -430,14 +471,21 @@ RunService.Heartbeat:Connect(function()
 					tan = tan.Unit
 					local inw = Vector3.new(0, 0, 0)
 					if flat > wantRadius + 2 then
-						inw = Vector3.new(-off.X, 0, -off.Z).Unit * 50
+						inw = Vector3.new(-off.X, 0, -off.Z).Unit * 80
 					elseif flat < wantRadius - 2 then
 						inw = Vector3.new(off.X, 0, off.Z).Unit * 20
 					end
-					local up = 60
+					local up = 80
 					if height > 110 then up = -30 end
-					pcall(function() part.AssemblyLinearVelocity = tan * 90 + inw + Vector3.new(0, up, 0) end)
+					pcall(function() part.AssemblyLinearVelocity = tan * 150 + inw + Vector3.new(0, up, 0) end)
+					if flat < 200 then
+						pcall(function()
+							local want = torCenter + Vector3.new(off.X * 0.85, off.Y, off.Z * 0.85)
+							part.CFrame = CFrame.new(part.Position:Lerp(want, 0.1))
+						end)
+					end
 				end
+			end
 			end
 		end
 	end
@@ -453,9 +501,9 @@ local function flingPlayersFrom(pos, radius, power)
 				if d < radius then
 					local dir = Vector3.new(0, 1, 0)
 					if d > 0.5 then dir = off.Unit end
-					-- Repeat 12 times: a single set gets overwritten by the server
+					-- Repeat 20 times over 2s: a single set gets overwritten by the server
 					task.spawn(function()
-						for i = 1, 12 do
+						for i = 1, 20 do
 							pcall(function()
 								ph.AssemblyLinearVelocity = dir * power + Vector3.new(0, power * 0.7, 0)
 								local bv = ph:FindFirstChild("ANTH_NukeBV")
@@ -498,6 +546,75 @@ local function flingPlayersFrom(pos, radius, power)
 			end
 		end
 	end
+end
+
+-- Slam unanchored parts into a target, fast, repeatedly.
+-- This is the part that actually hurts/flings them: parts YOU own colliding
+-- with their character replicates, setting their velocity directly often does not.
+local function slamPartsAt(target, seconds)
+	if not target or not target.Character then return end
+	local th = target.Character:FindFirstChild("HumanoidRootPart")
+	if not th then return end
+	task.spawn(function()
+		local parts = {}
+		for _, part in ipairs(getUnanchored()) do
+			if #parts >= 20 then break end
+			if (part.Position - th.Position).Magnitude < 150 then
+				table.insert(parts, part)
+			end
+		end
+		if #parts == 0 then
+			for _, part in ipairs(getUnanchored()) do
+				if #parts >= 20 then break end
+				table.insert(parts, part)
+			end
+		end
+		local start = os.clock()
+		while os.clock() - start < seconds do
+			local tHRP = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+			if not tHRP then break end
+			for _, part in ipairs(parts) do
+				if part and part.Parent then
+					pcall(function()
+						part.CFrame = CFrame.new(tHRP.Position + Vector3.new(math.random(-4, 4), math.random(2, 6), math.random(-4, 4)))
+						part.AssemblyLinearVelocity = Vector3.new(math.random(-100, 100), 200, math.random(-100, 100))
+						part.AssemblyAngularVelocity = Vector3.new(math.random(-100, 100), math.random(-100, 100), math.random(-100, 100))
+					end)
+				end
+			end
+			task.wait(0.1)
+		end
+	end)
+end
+
+local function doKill(target)
+	if not target then
+		notify("Kill - pick a target: ;kill bacon")
+		return
+	end
+	if target == LocalPlayer then
+		notify("Kill - you cannot kill yourself with this")
+		return
+	end
+	notify("KILL on " .. target.DisplayName .. " - slamming blocks into them")
+	slamPartsAt(target, 3)
+	-- Explosions at them, repeatedly, plus direct fling attempts
+	task.spawn(function()
+		for i = 1, 15 do
+			local tHRP = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+			if not tHRP then break end
+			pcall(function()
+				local ex = Instance.new("Explosion")
+				ex.Position = tHRP.Position
+				ex.BlastRadius = 12
+				ex.BlastPressure = 1000000
+				ex.DestroyJointRadiusPercent = 1
+				ex.Parent = Workspace
+				tHRP.AssemblyLinearVelocity = Vector3.new(math.random(-200, 200), 400, math.random(-200, 200))
+			end)
+			task.wait(0.2)
+		end
+	end)
 end
 
 local function doNuke(target)
@@ -550,7 +667,13 @@ local function doNuke(target)
 			end)
 		end
 	end
-	flingPlayersFrom(c, NUKE_RADIUS, 400)
+	flingPlayersFrom(c, NUKE_RADIUS, 600)
+	if target then
+		slamPartsAt(target, 2)
+	else
+		local nearest = findPlayer("nearest")
+		if nearest then slamPartsAt(nearest, 2) end
+	end
 	-- You are excluded above, and your velocity is zeroed so the blast does not fling you
 	local myHRP = getHRP()
 	if myHRP then
@@ -614,6 +737,16 @@ local Plugin = {
 				doNuke(t)
 			end,
 		},
+		["kill"] = {
+			ListName = "kill [player]",
+			Description = "Slam unanchored blocks into a player really fast, repeatedly, plus explosions at them. ;kill bacon",
+			Aliases = {},
+			Function = function(args, speaker)
+				local t = nil
+				if args and args[1] then t = findPlayer(args[1]) end
+				doKill(t)
+			end,
+		},
 		["stopphysics"] = {
 			ListName = "stopphysics",
 			Description = "Stop blackhole and tornado.",
@@ -629,7 +762,7 @@ local Plugin = {
 			Description = "Test if ANTH Physics is loaded. If this does nothing, the plugin did not load.",
 			Aliases = {},
 			Function = function(args, speaker)
-				notify("ANTH Physics v1.2 is LOADED - blackhole / tornado / nuke / wand are ready")
+				notify("ANTH Physics v1.4 is LOADED - blackhole / tornado / nuke / kill / wand are ready")
 			end,
 		},
 		["wand"] = {
@@ -675,12 +808,14 @@ local function runChatCmd(cmd, arg)
 		notify("Tornado OFF")
 	elseif cmd == "nuke" then
 		doNuke(t)
+	elseif cmd == "kill" then
+		doKill(t)
 	elseif cmd == "stopphysics" or cmd == "stopallphysics" then
 		stopBH()
 		stopTOR()
 		notify("Physics stopped")
 	elseif cmd == "ping" then
-		notify("ANTH Physics v1.2 is LOADED - blackhole / tornado / nuke / wand are ready")
+		notify("ANTH Physics v1.4 is LOADED - blackhole / tornado / nuke / kill / wand are ready")
 	elseif cmd == "wand" then
 		giveWand()
 	elseif cmd == "unwand" then
@@ -689,7 +824,7 @@ local function runChatCmd(cmd, arg)
 end
 task.spawn(function()
 	task.wait(1)
-	notify("ANTH Physics v1.2 loaded - try ;ping or /ping in chat, or ;blackhole in IY")
+	notify("ANTH Physics v1.4 loaded - try ;ping or /ping in chat, or ;blackhole in IY")
 	LocalPlayer.Chatted:Connect(function(msg)
 		local first = string.sub(msg, 1, 1)
 		if first ~= ";" and first ~= "/" then return end
