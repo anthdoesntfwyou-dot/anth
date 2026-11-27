@@ -131,7 +131,7 @@ local titleTxt = Instance.new("TextLabel")
 titleTxt.Size = UDim2.new(1, -90, 1, 0)
 titleTxt.Position = UDim2.new(0, 12, 0, 0)
 titleTxt.BackgroundTransparency = 1
-titleTxt.Text = "ANTH // TERMINAL [v1.3 DELTA]"
+titleTxt.Text = "ANTH // TERMINAL [v1.4 DELTA]"
 titleTxt.TextColor3 = NEON
 titleTxt.Font = Enum.Font.Code
 titleTxt.TextSize = 15
@@ -450,7 +450,13 @@ local function getUnanchored()
 	local list = {}
 	for _, o in ipairs(Workspace:GetDescendants()) do
 		if o:IsA("BasePart") and not o.Anchored then
-			if o.Name ~= "BlackholeCenter" and o.Name ~= "TornadoCenter" and o.Name ~= "TsunamiWall" then
+			-- v1.4 fix: island / grass / map platforms are often unanchored
+			-- but huge. Moving them moves the ground out from under you
+			-- and kills you. Only touch small loose props.
+			local sz = o.Size
+			if sz.X > 20 or sz.Y > 20 or sz.Z > 20 then
+				-- skip huge part, do not add to list
+			elseif o.Name ~= "BlackholeCenter" and o.Name ~= "TornadoCenter" and o.Name ~= "TsunamiWall" then
 				local isChar = false
 				for _, plr in ipairs(Players:GetPlayers()) do
 					if plr.Character and o:IsDescendantOf(plr.Character) then
@@ -1353,6 +1359,7 @@ local WandBox = nil
 local WandEquipped = false
 local WandWanted = false
 local WandLoopConn = nil
+local WandEquipTime = 0
 
 local function isCharPart(part)
 	for _, plr in ipairs(Players:GetPlayers()) do
@@ -1377,42 +1384,58 @@ local function releaseWand()
 	WandGrabbed = nil
 end
 
+local function isSafeWandPart(part, myHRP)
+	if not part or not part:IsA("BasePart") then
+		return false, "not a part"
+	end
+	if part.Anchored then
+		return false, "anchored"
+	end
+	if isCharPart(part) then
+		return false, "player body"
+	end
+	local sz = part.Size
+	if sz.X > 8 or sz.Y > 8 or sz.Z > 8 then
+		return false, "too big - that is map / island, not a loose prop"
+	end
+	if sz.Magnitude > 10 then
+		return false, "too big"
+	end
+	if sz.X > 6 and sz.Z > 6 and sz.Y < 3 then
+		return false, "that looks like floor / grass"
+	end
+	if myHRP then
+		local off = part.Position - myHRP.Position
+		if off.Y < -1 and off.Y > -6 and math.abs(off.X) < 4 and math.abs(off.Z) < 4 then
+			return false, "you are standing on it"
+		end
+	end
+	return true, ""
+end
+
 local function tryGrabWand()
+	-- v1.4 fix: NO fallback. Old code grabbed the nearest loose part
+	-- within 30 studs if you tapped grass / island (anchored). On
+	-- grass/island maps that grabbed a huge boulder / car / island
+	-- piece and dragged it into you, pushing you off and killing you.
+	-- Now: only grab the part you DIRECTLY tapped, and only if it is
+	-- small and safe. Tapping grass does nothing now.
 	local mouse = LocalPlayer:GetMouse()
-	local hitPos = nil
 	local target = nil
 	pcall(function()
 		target = mouse.Target
-		hitPos = mouse.Hit.Position
 	end)
 	local myHRP = getHRP()
-	if not hitPos and myHRP then
-		hitPos = myHRP.Position
-	end
-	if not hitPos then
-		notify("Wand: tap a part first")
+	if not target then
+		notify("Wand: tap a small loose part directly - tapping grass does nothing now")
 		return
 	end
-	local pick = nil
-	if target and target:IsA("BasePart") and not target.Anchored and not isCharPart(target) then
-		pick = target
-	end
-	if not pick then
-		local bestD = 30
-		for _, part in ipairs(getUnanchored()) do
-			if not isCharPart(part) then
-				local d = (part.Position - hitPos).Magnitude
-				if d < bestD then
-					bestD = d
-					pick = part
-				end
-			end
-		end
-	end
-	if not pick then
-		notify("Wand: no loose part there - tap closer to a part (anchored parts cannot be grabbed)")
+	local ok, why = isSafeWandPart(target, myHRP)
+	if not ok then
+		notify("Wand: cannot grab that - " .. why)
 		return
 	end
+	local pick = target
 	WandGrabbed = pick
 	local box = Instance.new("SelectionBox")
 	box.Adornee = pick
@@ -1420,7 +1443,7 @@ local function tryGrabWand()
 	box.LineThickness = 0.05
 	box.Parent = pick
 	WandBox = box
-	notify("Wand grabbed: " .. pick.Name .. " - move mouse / camera to drag, tap again to drop, " .. PREFIX .. "throw to throw it")
+	notify("Wand grabbed: " .. pick.Name .. " - tap again to drop, " .. PREFIX .. "throw to throw it")
 end
 
 local function startWandLoop()
@@ -1435,18 +1458,32 @@ local function startWandLoop()
 			releaseWand()
 			return
 		end
-		local mouse = LocalPlayer:GetMouse()
+		-- v1.4 fix: on mobile Mouse.Hit is your joystick / last touch,
+		-- so the grabbed part was dragged into your feet and pushed
+		-- you off the island. On mobile use a point in front of your
+		-- camera instead, so it floats in front of you like a pet.
 		local targetPos = nil
-		pcall(function()
-			targetPos = mouse.Hit.Position
-		end)
-		if not targetPos then
+		if IS_MOBILE then
 			local cam = Workspace.CurrentCamera
-			local hrp = getHRP()
-			if cam and hrp then
-				targetPos = cam.CFrame.Position + cam.CFrame.LookVector * 12
+			local hrp2 = getHRP()
+			if cam and hrp2 then
+				targetPos = hrp2.Position + cam.CFrame.LookVector * 12 + Vector3.new(0, 3, 0)
 			else
 				return
+			end
+		else
+			local mouse = LocalPlayer:GetMouse()
+			pcall(function()
+				targetPos = mouse.Hit.Position
+			end)
+			if not targetPos then
+				local cam = Workspace.CurrentCamera
+				local hrp = getHRP()
+				if cam and hrp then
+					targetPos = cam.CFrame.Position + cam.CFrame.LookVector * 12
+				else
+					return
+				end
 			end
 		end
 		local hrp = getHRP()
@@ -1489,6 +1526,7 @@ local function giveWand()
 	handle.Material = Enum.Material.Neon
 	handle.CanCollide = false
 	handle.CanQuery = false
+	handle.Massless = true
 	handle.Parent = tool
 	local tip = Instance.new("Part")
 	tip.Name = "Tip"
@@ -1498,19 +1536,30 @@ local function giveWand()
 	tip.Material = Enum.Material.Neon
 	tip.CanCollide = false
 	tip.CanQuery = false
-	tip.CFrame = CFrame.new(0, 1, 0)
+	tip.Massless = true
 	tip.Parent = tool
+	-- v1.4 fix: Tip was unwelded, so it fell off the tool and could
+	-- fling your character. Weld it to the Handle so it stays put.
+	local tipWeld = Instance.new("Weld")
+	tipWeld.Part0 = handle
+	tipWeld.Part1 = tip
+	tipWeld.C0 = CFrame.new(0, 1, 0)
+	tipWeld.Parent = handle
 	tool.Grip = CFrame.new(0, -0.5, 0) * CFrame.Angles(math.rad(45), 0, 0)
 	tool.Equipped:Connect(function()
 		WandEquipped = true
+		WandEquipTime = os.clock()
 		startWandLoop()
-		notify("Wand equipped - tap a loose part to grab it")
+		notify("Wand equipped - tap a small loose part to grab it")
 	end)
 	tool.Unequipped:Connect(function()
 		WandEquipped = false
 		releaseWand()
 	end)
 	tool.Activated:Connect(function()
+		if WandEquipTime and os.clock() - WandEquipTime < 0.5 then
+			return
+		end
 		if WandGrabbed then
 			releaseWand()
 			notify("Wand dropped it")
@@ -1831,6 +1880,8 @@ local function setZombie(on)
 end
 
 LocalPlayer.CharacterAdded:Connect(function()
+	releaseWand()
+	WandEquipped = false
 	if WandWanted then
 		task.delay(1, function()
 			if WandWanted then
