@@ -1,6 +1,8 @@
--- ANTH Physics v1.2 - Infinite Yield plugin
--- Commands: ;blackhole [player] ;unblackhole ;tornado [player] ;untornado ;nuke [player] ;wand ;throw ;ping
+-- ANTH Physics v1.3 - Infinite Yield plugin
+-- Commands: ;blackhole [player] ;unblackhole ;tornado [player] ;untornado ;nuke [player] ;wand ;ping
 -- Works in IY command prompt AND in chat with ; or / prefix.
+-- v1.3: ;throw command REMOVED. Throw is now a small on-screen THROW button,
+-- only visible while the ANTH Wand is equipped. Tap it to throw the held part.
 -- Install: run the writefile line in Delta before IY, then ;addplugin anth-physics
 -- v1.2 recheck: v1.1 removed the chat listener, so if IY did not register a
 -- command, or you typed /blackhole in chat, nothing happened at all, with no
@@ -194,6 +196,37 @@ end
 -- ================= ANTH WAND =================
 local WandTool = nil
 local WandHeld = nil
+local throwWand
+local ThrowBtn = nil
+local function ensureThrowButton()
+	if ThrowBtn and ThrowBtn.Parent then return end
+	local pg = LocalPlayer:FindFirstChild("PlayerGui")
+	if not pg then return end
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "ANTH_WandThrow"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.Parent = pg
+	local btn = Instance.new("TextButton")
+	btn.Name = "ThrowBtn"
+	btn.Text = "THROW"
+	btn.Size = UDim2.new(0, 90, 0, 36)
+	btn.Position = UDim2.new(1, -100, 1, -140)
+	btn.AnchorPoint = Vector2.new(0, 0)
+	btn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+	btn.TextColor3 = Color3.fromRGB(0, 255, 100)
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 16
+	btn.Visible = false
+	btn.BorderSizePixel = 1
+	btn.BorderColor3 = Color3.fromRGB(0, 255, 100)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = btn
+	btn.Parent = gui
+	btn.MouseButton1Click:Connect(function() throwWand() end)
+	ThrowBtn = btn
+end
 local function clearWandHold()
 	if WandHeld and WandHeld.Parent then
 		pcall(function() WandHeld.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
@@ -275,16 +308,24 @@ local function giveWand()
 			return
 		end
 		WandHeld = target
-		notify("Wand - grabbed " .. target.Name .. " - tap again to drop, ;throw to throw it")
+		notify("Wand - grabbed " .. target.Name .. " - tap again to drop, tap THROW button to throw it")
 	end)
-	tool.Unequipped:Connect(function() clearWandHold() end)
+	tool.Unequipped:Connect(function()
+		clearWandHold()
+		if ThrowBtn then ThrowBtn.Visible = false end
+	end)
+	tool.Equipped:Connect(function()
+		ensureThrowButton()
+		if ThrowBtn then ThrowBtn.Visible = true end
+	end)
 	tool.Parent = LocalPlayer.Backpack
 	WandTool = tool
-	notify("ANTH Wand given - equip it, tap a small loose part to grab it, ;throw to throw it")
+	ensureThrowButton()
+	notify("ANTH Wand given - equip it, tap a small loose part to grab it, tap the THROW button to throw it")
 end
-local function throwWand()
+throwWand = function()
 	if not WandHeld or not WandHeld.Parent then
-		notify("Wand - you are not holding anything, use ;wand then tap a part")
+		notify("Wand - you are not holding anything, tap a part first")
 		return
 	end
 	local hrp = getHRP()
@@ -300,6 +341,7 @@ local function throwWand()
 end
 local function removeWand()
 	clearWandHold()
+	if ThrowBtn then ThrowBtn.Visible = false end
 	if WandTool then WandTool:Destroy() WandTool = nil end
 	notify("ANTH Wand removed")
 end
@@ -592,18 +634,10 @@ local Plugin = {
 		},
 		["wand"] = {
 			ListName = "wand",
-			Description = "Give the ANTH Wand tool. Equip it, tap a small loose part to grab it, tap again to drop, ;throw to throw it.",
+			Description = "Give the ANTH Wand tool. Equip it, tap a small loose part to grab it, tap again to drop, tap the small THROW button on screen to throw it.",
 			Aliases = {},
 			Function = function(args, speaker)
 				giveWand()
-			end,
-		},
-		["throw"] = {
-			ListName = "throw",
-			Description = "Throw the part the ANTH Wand is holding.",
-			Aliases = {},
-			Function = function(args, speaker)
-				throwWand()
 			end,
 		},
 		["unwand"] = {
@@ -649,8 +683,6 @@ local function runChatCmd(cmd, arg)
 		notify("ANTH Physics v1.2 is LOADED - blackhole / tornado / nuke / wand are ready")
 	elseif cmd == "wand" then
 		giveWand()
-	elseif cmd == "throw" then
-		throwWand()
 	elseif cmd == "unwand" then
 		removeWand()
 	end
