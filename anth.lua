@@ -1,4 +1,4 @@
--- ANTH HUB - v1.6 Delta
+-- ANTH HUB - v1.7 Delta
 -- Fixes: draggable logo, hug fixed, noclip restore, NDS survive,
 -- zombie (server-visible), headless re-apply, more fun physics
 -- Same unified hub, rewritten for Delta (mobile + PC)
@@ -248,7 +248,7 @@ local titleTxt = Instance.new("TextLabel")
 titleTxt.Size = UDim2.new(1, -90, 1, 0)
 titleTxt.Position = UDim2.new(0, 12, 0, 0)
 titleTxt.BackgroundTransparency = 1
-titleTxt.Text = "ANTH // TERMINAL [v1.6 DELTA]"
+titleTxt.Text = "ANTH // TERMINAL [v1.7 DELTA]"
 titleTxt.TextColor3 = NEON
 titleTxt.Font = Enum.Font.Code
 titleTxt.TextSize = 15
@@ -453,7 +453,7 @@ cmdsTxt.TextSize = 13
 cmdsTxt.TextXAlignment = Enum.TextXAlignment.Left
 cmdsTxt.TextYAlignment = Enum.TextYAlignment.Top
 cmdsTxt.TextWrapped = true
-cmdsTxt.Text = "CORE\n;fly ;unfly ;speed 50 ;jump 80 ;god ;ungod\n;noclip ;clip ;spin 20 ;unspin ;tp bacon\n;bring bacon ;fling bacon ;reset ;sit\n\nSURVIVAL (NDS fix)\n;survive ;unsurvive ;anchor ;unanchor\n;antifling ;noantifling\n\nPHYSICS\n;blackhole [player] ;unblackhole\n;tornado [player] ;untornado\n;tsunami ;untsunami\n;orbit [player] ;fountain ;rain ;magnet [player]\n;launch ;quake ;explode ;swirl ;stop\n\nSOCIAL (fixed)\n;hug [player/nearest] ;unhug\n;backpack [player] ;unbackpack\n;headsit [player] ;unheadsit\n;headless ;unheadless\n\nBOOM\n;boom ;explode ;break ;unbreak\n\nWAND\n;wand ;unwand ;throw\n\nANIM (everyone sees)\n;zombie ;unzombie\n\nEMOTES\n;dance ;dance2 ;dance3 ;floss ;shuffle ;dab\n;wave ;point ;cheer ;laugh ;cry ;bow\n;salute ;think ;shy ;clap ;sleep ;sit ;lay\n;stopemote"
+cmdsTxt.Text = "CORE\n;fly ;unfly ;speed 50 ;jump 80 ;god ;ungod\n;noclip ;clip ;spin 20 ;unspin ;tp bacon\n;bring bacon ;fling bacon ;reset ;sit\n\nSURVIVAL (NDS fix)\n;survive ;unsurvive ;anchor ;unanchor\n;antifling ;noantifling\n\nPHYSICS\n;blackhole [player] ;unblackhole\n;tornado [player] ;untornado\n;tsunami ;untsunami\n;orbit [player] ;fountain ;rain ;magnet [player]\n;launch ;quake ;explode ;swirl ;stop\n\nSOCIAL (fixed)\n;hug [player/nearest] ;unhug\n;backpack [player] ;unbackpack\n;headsit [player] ;unheadsit\n;headless ;unheadless\n\nBOOM\n;boom ;explode\n\nWAND\n;wand ;unwand ;throw\n\nANIM (everyone sees)\n;zombie ;unzombie\n\nEMOTES\n;dance ;dance2 ;dance3 ;floss ;shuffle ;dab\n;wave ;point ;cheer ;laugh ;cry ;bow\n;salute ;think ;shy ;clap ;sleep ;sit ;lay\n;stopemote"
 cmdsTxt.Parent = cmdsFrame
 local CmdsTemplate = cmdsTxt.Text
 local function refreshCmds()
@@ -1730,7 +1730,7 @@ local function throwWand()
 	notify("Wand threw it!")
 end
 
--- ================= BOOM / BREAK ANCHORED =================
+-- ================= BOOM =================
 -- Honest limit: a normal Roblox Explosion CANNOT break anchored
 -- blocks for everyone. Anchored parts are server-locked - the
 -- server owns them, your client does not. Explosion only:
@@ -1738,12 +1738,6 @@ end
 --  * looks and sounds big
 -- Anchored blocks stay put for everyone, no matter how big the
 -- boom is. That is Roblox physics, not a hub bug.
--- ;break below is CLIENT-SIDE ONLY: anchored blocks go invisible
--- and no-collide on YOUR screen only, others still see them.
--- It is restorable with ;unbreak, and it does not break the map
--- for anyone else.
-local BrokenAnchored = {}
-
 local function doBoom(pos)
 	if not pos then
 		local hrp = getHRP()
@@ -1796,53 +1790,6 @@ local function doBoom(pos)
 		end
 	end
 	notify("BOOM! - flung loose parts, broke welds. Anchored blocks stay - server owns them.")
-end
-
-local function breakAnchored(radius)
-	radius = radius or 20
-	if radius > 30 then
-		radius = 30
-	end
-	local hrp = getHRP()
-	if not hrp then
-		return
-	end
-	local count = 0
-	for _, o in ipairs(Workspace:GetDescendants()) do
-		if count >= 100 then
-			break
-		end
-		if o:IsA("BasePart") and o.Anchored and not isCharPart(o) then
-			if (o.Position - hrp.Position).Magnitude <= radius then
-				if not BrokenAnchored[o] then
-					BrokenAnchored[o] = {Transparency = o.Transparency, CanCollide = o.CanCollide, CanQuery = o.CanQuery}
-					pcall(function()
-						o.Transparency = 1
-						o.CanCollide = false
-						o.CanQuery = false
-					end)
-					count = count + 1
-				end
-			end
-		end
-	end
-	notify("Broke " .. tostring(count) .. " anchored parts - CLIENT-SIDE ONLY, others still see them. ;unbreak to bring them back.")
-end
-
-local function unbreakAnchored()
-	local count = 0
-	for part, orig in pairs(BrokenAnchored) do
-		if part and part.Parent then
-			pcall(function()
-				part.Transparency = orig.Transparency
-				part.CanCollide = orig.CanCollide
-				part.CanQuery = orig.CanQuery
-			end)
-			count = count + 1
-		end
-	end
-	BrokenAnchored = {}
-	notify("Restored " .. tostring(count) .. " anchored parts.")
 end
 
 -- ================= HUG / BACKPACK / HEADSIT =================
@@ -2344,10 +2291,7 @@ local function runCommand(raw)
 		else
 			doBoom(nil)
 		end
-	elseif cmd == "break" or cmd == "breakanchored" then
-		breakAnchored(tonumber(args[1]) or 20)
-	elseif cmd == "unbreak" then
-		unbreakAnchored()
+
 	elseif cmd == "fly" then
 		startFly()
 	elseif cmd == "unfly" then
