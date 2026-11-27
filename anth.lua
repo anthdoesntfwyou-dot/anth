@@ -1,4 +1,6 @@
--- ANTH HUB - Delta Fixed Version
+-- ANTH HUB - v1.2 Delta
+-- Fixes: draggable logo, hug fixed, noclip restore, NDS survive,
+-- zombie (server-visible), headless re-apply, more fun physics
 -- Same unified hub, rewritten for Delta (mobile + PC)
 -- FIXED: the last version had 2-3 commands on one line, which is a
 -- syntax error in Luau, so Delta would not run it at all.
@@ -122,7 +124,7 @@ local titleTxt = Instance.new("TextLabel")
 titleTxt.Size = UDim2.new(1, -90, 1, 0)
 titleTxt.Position = UDim2.new(0, 12, 0, 0)
 titleTxt.BackgroundTransparency = 1
-titleTxt.Text = "ANTH // TERMINAL [v1.1 DELTA]"
+titleTxt.Text = "ANTH // TERMINAL [v1.2 DELTA]"
 titleTxt.TextColor3 = NEON
 titleTxt.Font = Enum.Font.Code
 titleTxt.TextSize = 15
@@ -157,7 +159,28 @@ local function maximise()
 end
 
 xBtn.MouseButton1Click:Connect(minimise)
-logo.MouseButton1Click:Connect(maximise)
+-- Logo: drag to move it, tap (no drag) to reopen. This is the v1.2 fix.
+local logoDragging = false
+local logoDragStart = nil
+local logoStartPos = nil
+local logoMoved = false
+logo.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		logoDragging = true
+		logoMoved = false
+		logoDragStart = input.Position
+		logoStartPos = logo.Position
+	end
+end)
+logo.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		local wasDrag = logoMoved
+		logoDragging = false
+		if not wasDrag then
+			maximise()
+		end
+	end
+end)
 
 -- Drag by title bar, mouse + touch
 local dragging = false
@@ -180,6 +203,15 @@ UserInputService.InputChanged:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
 			local delta = input.Position - dragStart
 			main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end
+	if logoDragging then
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			local delta = input.Position - logoDragStart
+			if delta.Magnitude > 8 then
+				logoMoved = true
+			end
+			logo.Position = UDim2.new(logoStartPos.X.Scale, logoStartPos.X.Offset + delta.X, logoStartPos.Y.Scale, logoStartPos.Y.Offset + delta.Y)
 		end
 	end
 end)
@@ -297,7 +329,7 @@ cmdsTxt.TextSize = 13
 cmdsTxt.TextXAlignment = Enum.TextXAlignment.Left
 cmdsTxt.TextYAlignment = Enum.TextYAlignment.Top
 cmdsTxt.TextWrapped = true
-cmdsTxt.Text = "CORE\n;fly ;unfly ;speed 50 ;jump 80 ;god ;ungod\n;noclip ;clip ;spin 20 ;unspin ;tp bacon\n;bring bacon ;fling bacon ;reset ;sit\n\nPHYSICS\n;blackhole [player] ;unblackhole\n;tornado [player] ;untornado\n;tsunami ;untsunami ;stop\n\nSOCIAL\n;hug bacon ;unhug ;backpack bacon ;unbackpack\n;headsit bacon ;unheadsit ;headless ;unheadless\n\nEMOTES\n;dance ;dance2 ;dance3 ;floss ;shuffle ;dab\n;wave ;point ;cheer ;laugh ;cry ;bow\n;salute ;think ;shy ;clap ;sleep ;sit ;lay\n;stopemote"
+cmdsTxt.Text = "CORE\n;fly ;unfly ;speed 50 ;jump 80 ;god ;ungod\n;noclip ;clip ;spin 20 ;unspin ;tp bacon\n;bring bacon ;fling bacon ;reset ;sit\n\nSURVIVAL (NDS fix)\n;survive ;unsurvive ;anchor ;unanchor\n;antifling ;noantifling\n\nPHYSICS\n;blackhole [player] ;unblackhole\n;tornado [player] ;untornado\n;tsunami ;untsunami\n;orbit [player] ;fountain ;rain ;magnet [player]\n;launch ;quake ;explode ;swirl ;stop\n\nSOCIAL (fixed)\n;hug [player/nearest] ;unhug\n;backpack [player] ;unbackpack\n;headsit [player] ;unheadsit\n;headless ;unheadless\n\nANIM (everyone sees)\n;zombie ;unzombie\n\nEMOTES\n;dance ;dance2 ;dance3 ;floss ;shuffle ;dab\n;wave ;point ;cheer ;laugh ;cry ;bow\n;salute ;think ;shy ;clap ;sleep ;sit ;lay\n;stopemote"
 cmdsTxt.Parent = cmdsFrame
 
 local cmdsOpen = false
@@ -365,6 +397,9 @@ local function getPlayer(a)
 		local list = Players:GetPlayers()
 		return list[math.random(1, #list)]
 	end
+	if a == "nearest" or a == "closest" or a == "near" then
+		return getNearestPlayer()
+	end
 	for _, p in ipairs(Players:GetPlayers()) do
 		if p.Name:lower():sub(1, #a) == a then
 			return p
@@ -374,6 +409,28 @@ local function getPlayer(a)
 		end
 	end
 	return nil
+end
+
+local function getNearestPlayer()
+	local myHRP = getHRP()
+	if not myHRP then
+		return nil
+	end
+	local best = nil
+	local bestD = math.huge
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer and plr.Character then
+			local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local d = (hrp.Position - myHRP.Position).Magnitude
+				if d < bestD then
+					bestD = d
+					best = plr
+				end
+			end
+		end
+	end
+	return best
 end
 
 local function getUnanchored()
@@ -671,7 +728,19 @@ local function setNoclip(on)
 			noclipConn:Disconnect()
 			noclipConn = nil
 		end
-		notify("Noclip OFF")
+		local c = getChar()
+		if c then
+			for _, p in ipairs(c:GetDescendants()) do
+				if p:IsA("BasePart") then
+					if p.Name == "HumanoidRootPart" then
+						p.CanCollide = false
+					else
+						p.CanCollide = true
+					end
+				end
+			end
+		end
+		notify("Noclip OFF - collisions back on")
 	end
 end
 
@@ -730,6 +799,74 @@ local function stopSpin()
 		spinVel = nil
 	end
 	notify("Spin OFF")
+end
+
+-- ================= SURVIVAL / NDS FIX =================
+-- Bug in v1.1: noclip never restored CanCollide, so you fell through
+-- the map in Natural Disaster Survival and died. Fixed above.
+-- Survive = god + anchor (HRP Anchored) + anti-fling. Disasters push
+-- you with velocity, anchoring + zeroing that velocity stops it.
+local SurviveOn = false
+local AntiFlingOn = false
+local AntiFlingConn = nil
+local AnchorOn = false
+
+local function setAnchor(on)
+	AnchorOn = on
+	local hrp = getHRP()
+	if hrp then
+		hrp.Anchored = on
+	end
+	if on then
+		notify("Anchor ON - you will not move")
+	else
+		notify("Anchor OFF")
+	end
+end
+
+local function setAntiFling(on)
+	AntiFlingOn = on
+	if AntiFlingConn then
+		AntiFlingConn:Disconnect()
+		AntiFlingConn = nil
+	end
+	if on then
+		AntiFlingConn = RunService.Heartbeat:Connect(function()
+			local hrp = getHRP()
+			if not hrp then
+				return
+			end
+			if SurviveOn and not hrp.Anchored then
+				hrp.Anchored = true
+			end
+			if hrp.AssemblyLinearVelocity.Magnitude > 80 then
+				hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+			end
+			if hrp.AssemblyAngularVelocity.Magnitude > 80 then
+				hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+			end
+		end)
+		notify("Anti-fling ON")
+	else
+		notify("Anti-fling OFF")
+	end
+end
+
+local function setSurvive(on)
+	SurviveOn = on
+	if on then
+		stopFly()
+		stopSpin()
+		setGod(true)
+		setAnchor(true)
+		setAntiFling(true)
+		notify("Survive ON - anchored + god + anti-fling. ;unsurvive to walk again")
+	else
+		setGod(false)
+		setAnchor(false)
+		setAntiFling(false)
+		notify("Survive OFF")
+	end
 end
 
 -- ================= BLACKHOLE =================
@@ -1002,16 +1139,198 @@ local function startTSU()
 	end)
 end
 
+-- ================= FUN PHYSICS =================
+local FunActive = false
+local FunMode = nil
+local FunTarget = nil
+local FunCenter = nil
+
+local function stopFun()
+	FunActive = false
+	FunMode = nil
+end
+
+local function startFun(mode, target)
+	stopBH()
+	stopTOR()
+	stopTSU()
+	stopFun()
+	FunTarget = target
+	local hrp = getHRP()
+	if target and target.Character then
+		local th = target.Character:FindFirstChild("HumanoidRootPart")
+		if th then
+			FunCenter = th.Position
+		else
+			FunCenter = hrp and hrp.Position or Vector3.new(0, 10, 0)
+		end
+	elseif hrp then
+		FunCenter = hrp.Position + hrp.CFrame.LookVector * 10
+	else
+		FunCenter = Vector3.new(0, 10, 0)
+	end
+	FunMode = mode
+	FunActive = true
+	if target then
+		notify(mode .. " ON - on " .. target.DisplayName)
+	else
+		notify(mode .. " ON")
+	end
+	task.spawn(function()
+		while FunActive and FunMode == mode do
+			task.wait(0.03)
+			local center = FunCenter
+			if FunTarget and FunTarget.Character then
+				local th = FunTarget.Character:FindFirstChild("HumanoidRootPart")
+				if th then
+					center = th.Position
+					FunCenter = center
+				end
+			end
+			if not center then
+				break
+			end
+			for _, part in ipairs(getUnanchored()) do
+				if not FunActive then
+					break
+				end
+				local off = part.Position - center
+				local d = off.Magnitude
+				if mode == "orbit" then
+					if d < 120 then
+						local tan = Vector3.new(-off.Z, 0, off.X)
+						if tan.Magnitude < 0.1 then
+							tan = Vector3.new(1, 0, 0)
+						end
+						tan = tan.Unit
+						local inward = Vector3.new(0, 0, 0)
+						if d > 25 then
+							inward = -off.Unit * 20
+						elseif d < 15 then
+							inward = off.Unit * 20
+						end
+						pcall(function()
+							part.AssemblyLinearVelocity = tan * 60 + inward + Vector3.new(0, 5, 0)
+						end)
+					end
+				elseif mode == "swirl" then
+					if d < 60 then
+						local tan = Vector3.new(-off.Z, 0, off.X)
+						if tan.Magnitude < 0.1 then
+							tan = Vector3.new(1, 0, 0)
+						end
+						pcall(function()
+							part.AssemblyLinearVelocity = tan.Unit * 80 + Vector3.new(0, 10, 0)
+						end)
+					end
+				elseif mode == "fountain" then
+					if d < 50 and part.Position.Y < center.Y + 10 then
+						pcall(function()
+							part.AssemblyLinearVelocity = Vector3.new(math.random(-20, 20), 120, math.random(-20, 20))
+						end)
+					end
+				elseif mode == "rain" then
+					if d < 80 and part.Position.Y < center.Y + 60 then
+						pcall(function()
+							part.CFrame = CFrame.new(center + Vector3.new(math.random(-40, 40), 60, math.random(-40, 40)))
+							part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+						end)
+					end
+				elseif mode == "magnet" then
+					if d > 2 and d < 200 then
+						pcall(function()
+							part.AssemblyLinearVelocity = -off.Unit * 80
+						end)
+					elseif d <= 2 then
+						pcall(function()
+							part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+						end)
+					end
+				elseif mode == "quake" then
+					if d < 100 then
+						pcall(function()
+							part.AssemblyLinearVelocity = Vector3.new(math.random(-60, 60), 25, math.random(-60, 60))
+						end)
+					end
+				end
+			end
+			if mode == "quake" then
+				task.wait(0.2)
+			end
+		end
+	end)
+	if mode == "quake" then
+		task.delay(5, function()
+			if FunMode == "quake" then
+				stopFun()
+				notify("Quake finished")
+			end
+		end)
+	end
+end
+
+local function doLaunch()
+	local hrp = getHRP()
+	if not hrp then
+		return
+	end
+	local c = hrp.Position
+	for _, part in ipairs(getUnanchored()) do
+		if (part.Position - c).Magnitude < 120 then
+			pcall(function()
+				part.AssemblyLinearVelocity = Vector3.new(math.random(-30, 30), 200, math.random(-30, 30))
+			end)
+		end
+	end
+	notify("Launch!")
+end
+
+local function doExplode()
+	local hrp = getHRP()
+	if not hrp then
+		return
+	end
+	local c = hrp.Position
+	for _, part in ipairs(getUnanchored()) do
+		local off = part.Position - c
+		if off.Magnitude < 120 and off.Magnitude > 0.5 then
+			pcall(function()
+				part.AssemblyLinearVelocity = off.Unit * 150 + Vector3.new(0, 50, 0)
+			end)
+		end
+	end
+	notify("Explode!")
+end
+
 local function stopAll()
 	stopBH()
 	stopTOR()
 	stopTSU()
+	stopFun()
 	stopFly()
+	stopSpin()
+	setNoclip(false)
 	notify("Stopped everything")
 end
 
 -- ================= HUG / BACKPACK / HEADSIT =================
 local AttachWeld = nil
+
+local function setMyCollide(on)
+	local c = getChar()
+	if not c then
+		return
+	end
+	for _, p in ipairs(c:GetDescendants()) do
+		if p:IsA("BasePart") then
+			if p.Name == "HumanoidRootPart" then
+				p.CanCollide = false
+			else
+				p.CanCollide = on
+			end
+		end
+	end
+end
 
 local function detach()
 	if AttachWeld then
@@ -1021,13 +1340,18 @@ local function detach()
 	local h = getHum()
 	if h then
 		h.PlatformStand = false
+		h.AutoRotate = true
 	end
+	setMyCollide(true)
 	restorePose(0.3)
 end
 
 local function attachTo(target, mode)
 	if not target then
-		notify("Pick a player: ;hug bacon")
+		target = getNearestPlayer()
+	end
+	if not target then
+		notify("No player found - try ;hug <name> or ;hug nearest")
 		return
 	end
 	local thrp = nil
@@ -1037,54 +1361,73 @@ local function attachTo(target, mode)
 	local myHRP = getHRP()
 	local myHum = getHum()
 	if not thrp or not myHRP or not myHum then
-		notify("Target not found")
+		notify("Target not found - wait for them to load, then try again")
 		return
 	end
 	detach()
 	stopEmote()
+	stopFly()
+	if AnchorOn then
+		setAnchor(false)
+	end
 	savePose()
 	myHum.PlatformStand = true
+	myHum.AutoRotate = false
+	setMyCollide(false)
+	pcall(function()
+		myHum:ChangeState(Enum.HumanoidStateType.Physics)
+	end)
 	local w = Instance.new("Weld")
 	w.Name = "EmoteAttach"
 	w.Part0 = thrp
 	w.Part1 = myHRP
+	w.C1 = CFrame.new(0, 0, 0)
 	w.Parent = myHRP
 	if mode == "hug" then
-		w.C0 = CFrame.new(0, 0, 1.8) * CFrame.Angles(0, math.rad(180), 0)
+		w.C0 = CFrame.new(0, 0, 1.5) * CFrame.Angles(0, math.rad(180), 0)
 		tj("RS", CFrame.new(1, 0.5, 0) * CFrame.Angles(math.rad(-70), 0, math.rad(-20)), 0.4)
 		tj("LS", CFrame.new(-1, 0.5, 0) * CFrame.Angles(math.rad(-70), 0, math.rad(20)), 0.4)
-		notify("Hugging " .. target.DisplayName)
+		notify("Hugging " .. target.DisplayName .. " - ;unhug to let go")
 	elseif mode == "backpack" then
-		w.C0 = CFrame.new(0, 0.8, -1.1)
+		w.C0 = CFrame.new(0, 0.8, -1.2)
 		tj("RH", CFrame.new(1, -1, 0) * CFrame.Angles(math.rad(-80), 0, 0), 0.4)
 		tj("LH", CFrame.new(-1, -1, 0) * CFrame.Angles(math.rad(-80), 0, 0), 0.4)
 		tj("RS", CFrame.new(1, 0.5, 0) * CFrame.Angles(math.rad(-100), 0, math.rad(-30)), 0.4)
 		tj("LS", CFrame.new(-1, 0.5, 0) * CFrame.Angles(math.rad(-100), 0, math.rad(30)), 0.4)
-		notify("On " .. target.DisplayName .. "'s back")
+		notify("On " .. target.DisplayName .. "'s back - ;unbackpack to get off")
 	elseif mode == "headsit" then
-		w.C0 = CFrame.new(0, 2.8, 0)
+		w.C0 = CFrame.new(0, 2.9, 0)
 		tj("RH", CFrame.new(1, -1, 0) * CFrame.Angles(math.rad(-90), 0, 0), 0.4)
 		tj("LH", CFrame.new(-1, -1, 0) * CFrame.Angles(math.rad(-90), 0, 0), 0.4)
-		notify("Sitting on " .. target.DisplayName .. "'s head")
+		notify("Sitting on " .. target.DisplayName .. "'s head - ;unheadsit to get off")
 	end
 	AttachWeld = w
 	task.spawn(function()
 		while AttachWeld == w do
-			task.wait(0.5)
+			task.wait(0.3)
 			if not target.Parent or not target.Character then
 				detach()
+				notify("They left - let go")
 				break
 			end
-			if not target.Character:FindFirstChild("HumanoidRootPart") then
+			local th2 = target.Character:FindFirstChild("HumanoidRootPart")
+			if not th2 then
 				detach()
 				break
 			end
+			local h2 = getHum()
+			if h2 and not h2.PlatformStand then
+				h2.PlatformStand = true
+			end
+			setMyCollide(false)
 		end
 	end)
 end
 
 local HeadlessOn = false
-local function setHeadless(on)
+local HeadlessLoopOn = false
+
+local function applyHeadless()
 	local c = getChar()
 	if not c then
 		return
@@ -1093,31 +1436,181 @@ local function setHeadless(on)
 	if not head then
 		return
 	end
+	head.Transparency = 1
+	for _, d in ipairs(head:GetDescendants()) do
+		if d:IsA("Decal") then
+			d.Transparency = 1
+		end
+	end
+end
+
+local function setHeadless(on)
 	HeadlessOn = on
 	if on then
-		head.Transparency = 1
-		for _, d in ipairs(head:GetChildren()) do
-			if d:IsA("Decal") then
-				d.Transparency = 1
-			end
+		applyHeadless()
+		notify("Headless ON - everyone can see it")
+		if not HeadlessLoopOn then
+			HeadlessLoopOn = true
+			task.spawn(function()
+				while HeadlessOn do
+					task.wait(1)
+					if HeadlessOn then
+						applyHeadless()
+					end
+				end
+				HeadlessLoopOn = false
+			end)
 		end
-		notify("Headless ON")
 	else
-		head.Transparency = 0
-		for _, d in ipairs(head:GetChildren()) do
-			if d:IsA("Decal") then
-				d.Transparency = 0
+		local c = getChar()
+		if c then
+			local head = c:FindFirstChild("Head")
+			if head then
+				head.Transparency = 0
+				for _, d in ipairs(head:GetDescendants()) do
+					if d:IsA("Decal") then
+						d.Transparency = 0
+					end
+				end
 			end
 		end
 		notify("Headless OFF")
 	end
 end
 
+-- ================= ZOMBIE - server-visible =================
+-- This changes your own character's Animate script to Roblox's own
+-- Zombie pack (IDs from Roblox Creator Hub, checked 2026).
+-- Your Animator tracks replicate to the server / other players,
+-- so everyone sees the zombie walk / idle / run / jump.
+-- If a game forces its own animations server-side, it can override
+-- this - that is a game limit, not a client-only trick.
+local ZOMBIE = {}
+ZOMBIE.idle1 = 616158929
+ZOMBIE.idle2 = 616160636
+ZOMBIE.walk = 616168032
+ZOMBIE.run = 616163682
+ZOMBIE.jump = 616161997
+ZOMBIE.fall = 616157476
+ZOMBIE.climb = 616156119
+ZOMBIE.swim = 616165109
+ZOMBIE.swimidle = 616166655
+local DEFAULT_ANIM = {}
+DEFAULT_ANIM.idle1 = 507766388
+DEFAULT_ANIM.idle2 = 507766666
+DEFAULT_ANIM.walk = 507777826
+DEFAULT_ANIM.run = 507767714
+DEFAULT_ANIM.jump = 507765000
+DEFAULT_ANIM.fall = 507767968
+DEFAULT_ANIM.climb = 507765644
+DEFAULT_ANIM.swim = 507784897
+DEFAULT_ANIM.swimidle = 507784897
+local ZombieOn = false
+local ZombieLoopOn = false
+
+local function applyAnimPack(pack)
+	local c = getChar()
+	if not c then
+		return false
+	end
+	local an = c:FindFirstChild("Animate")
+	if not an then
+		return false
+	end
+	local function setAnim(path, id)
+		local obj = an
+		for _, part in ipairs(path) do
+			obj = obj:FindFirstChild(part)
+			if not obj then
+				return
+			end
+		end
+		pcall(function()
+			obj.AnimationId = "rbxassetid://" .. tostring(id)
+		end)
+	end
+	setAnim({"idle", "Animation1"}, pack.idle1)
+	setAnim({"idle", "Animation2"}, pack.idle2)
+	setAnim({"walk", "WalkAnim"}, pack.walk)
+	setAnim({"run", "RunAnim"}, pack.run)
+	setAnim({"jump", "JumpAnim"}, pack.jump)
+	setAnim({"fall", "FallAnim"}, pack.fall)
+	setAnim({"climb", "ClimbAnim"}, pack.climb)
+	setAnim({"swim", "Swim"}, pack.swim)
+	setAnim({"swimidle", "SwimIdle"}, pack.swimidle)
+	local animator = getAnim()
+	if animator then
+		pcall(function()
+			for _, tr in ipairs(animator:GetPlayingAnimationTracks()) do
+				tr:Stop(0)
+			end
+		end)
+	end
+	local h = getHum()
+	if h then
+		pcall(function()
+			h.Jump = true
+		end)
+	end
+	return true
+end
+
+local function setZombie(on)
+	ZombieOn = on
+	if on then
+		if applyAnimPack(ZOMBIE) then
+			local h = getHum()
+			if h then
+				h.WalkSpeed = 12
+			end
+			notify("Zombie ON - walk / idle / run / jump are zombie for everyone. ;unzombie to go back")
+		else
+			notify("Zombie failed - no Animate script found (try after respawn)")
+			ZombieOn = false
+			return
+		end
+		if not ZombieLoopOn then
+			ZombieLoopOn = true
+			task.spawn(function()
+				while ZombieOn do
+					task.wait(2)
+					if ZombieOn then
+						applyAnimPack(ZOMBIE)
+					end
+				end
+				ZombieLoopOn = false
+			end)
+		end
+	else
+		applyAnimPack(DEFAULT_ANIM)
+		local h = getHum()
+		if h then
+			h.WalkSpeed = 16
+		end
+		notify("Zombie OFF - back to normal")
+	end
+end
+
 LocalPlayer.CharacterAdded:Connect(function()
+	detach()
 	task.wait(1)
 	savePose()
 	if HeadlessOn then
-		setHeadless(true)
+		applyHeadless()
+	end
+	if ZombieOn then
+		applyAnimPack(ZOMBIE)
+	end
+	if SurviveOn then
+		local hrp = getHRP()
+		if hrp then
+			hrp.Anchored = true
+		end
+		local h = getHum()
+		if h then
+			h.MaxHealth = math.huge
+			h.Health = math.huge
+		end
 	end
 end)
 
@@ -1398,6 +1891,49 @@ local function runCommand(raw)
 	elseif cmd == "untsunami" or cmd == "stoptsunami" then
 		stopTSU()
 		notify("Tsunami OFF")
+	elseif cmd == "survive" or cmd == "nds" then
+		setSurvive(true)
+	elseif cmd == "unsurvive" or cmd == "unsuvive" or cmd == "unnnds" then
+		setSurvive(false)
+	elseif cmd == "anchor" then
+		setAnchor(true)
+	elseif cmd == "unanchor" then
+		setAnchor(false)
+	elseif cmd == "antifling" or cmd == "nofling" then
+		setAntiFling(true)
+	elseif cmd == "noantifling" or cmd == "unantifling" then
+		setAntiFling(false)
+	elseif cmd == "orbit" then
+		startFun("orbit", getPlayer(args[1]))
+	elseif cmd == "unorbit" or cmd == "stoporbit" then
+		stopFun()
+		notify("Orbit OFF")
+	elseif cmd == "fountain" then
+		startFun("fountain", getPlayer(args[1]))
+	elseif cmd == "unfountain" or cmd == "stopfountain" then
+		stopFun()
+		notify("Fountain OFF")
+	elseif cmd == "rain" then
+		startFun("rain", getPlayer(args[1]))
+	elseif cmd == "unrain" or cmd == "stoprain" then
+		stopFun()
+		notify("Rain OFF")
+	elseif cmd == "magnet" then
+		startFun("magnet", getPlayer(args[1]))
+	elseif cmd == "unmagnet" or cmd == "stopmagnet" then
+		stopFun()
+		notify("Magnet OFF")
+	elseif cmd == "launch" then
+		doLaunch()
+	elseif cmd == "quake" or cmd == "earthquake" then
+		startFun("quake", getPlayer(args[1]))
+	elseif cmd == "explode" then
+		doExplode()
+	elseif cmd == "swirl" then
+		startFun("swirl", getPlayer(args[1]))
+	elseif cmd == "unswirl" or cmd == "stopswirl" then
+		stopFun()
+		notify("Swirl OFF")
 	elseif cmd == "stop" or cmd == "stopall" then
 		stopAll()
 	elseif cmd == "hug" then
@@ -1419,6 +1955,10 @@ local function runCommand(raw)
 		setHeadless(true)
 	elseif cmd == "unheadless" then
 		setHeadless(false)
+	elseif cmd == "zombie" then
+		setZombie(true)
+	elseif cmd == "unzombie" or cmd == "normal" then
+		setZombie(false)
 	elseif cmd == "stopemote" or cmd == "unemote" then
 		stopAllEmotes()
 	elseif cmd == "dance" or cmd == "dance2" or cmd == "dance3" or cmd == "floss" or cmd == "shuffle" or cmd == "dab" or cmd == "wave" or cmd == "point" or cmd == "cheer" or cmd == "laugh" or cmd == "cry" or cmd == "bow" or cmd == "salute" or cmd == "think" or cmd == "shy" or cmd == "clap" or cmd == "sleep" or cmd == "lay" then
@@ -1445,6 +1985,7 @@ runBtn.MouseButton1Click:Connect(submit)
 
 stopBtn.MouseButton1Click:Connect(function()
 	stopAll()
+	stopFun()
 	stopAllEmotes()
 end)
 
