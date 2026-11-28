@@ -1,7 +1,13 @@
--- UNSTABLE SMP FFA | ANTH Hub v1.1
+-- UNSTABLE SMP FFA | ANTH Hub v1.2
 -- For Anth - Solara PC
 -- v1.1: UI restyled to match Jailbreak for Gooners / Enchanted Hub
 -- (red header, pill tabs, red checkbox rows, log at bottom).
+-- v1.2 FIX: v1.1 UI never showed in Solara - it used CoreGui,
+-- which Solara blocks. Now uses gethui / PlayerGui like Jailbreak,
+-- which is proven to show. Also fixed ESP copies: old runs left
+-- Highlights + name tags on every player, and re-running stacked
+-- more on top. Now ESP checks if one already exists on that
+-- character, and old ESP is destroyed on load / respawn.
 -- Added Auto Hit (Kill Aura, same thing, clearer name) and
 -- Safe Mode + Anti-Cheat Check. There is NO script that bypasses
 -- all anti-cheat - Safe Mode just makes you look human: capped
@@ -67,9 +73,25 @@ pcall(function()
 			if g.Name == "UnstableANTH" then g:Destroy() end
 		end
 	end
+	if gethui then
+		local ok, h = pcall(gethui)
+		if ok and h then
+			for _, g in ipairs(h:GetChildren()) do
+				if g.Name == "UnstableANTH" then g:Destroy() end
+			end
+		end
+	end
 	local cg = game:GetService("CoreGui")
 	for _, g in ipairs(cg:GetChildren()) do
 		if g.Name == "UnstableANTH" then g:Destroy() end
+	end
+	-- Destroy ESP copies left by old runs, on every player
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr.Character then
+			for _, d in ipairs(plr.Character:GetDescendants()) do
+				if d.Name == "UNSTABLE_ESP" or d.Name == "UNSTABLE_ESP_BB" then d:Destroy() end
+			end
+		end
 	end
 end)
 
@@ -381,9 +403,10 @@ local function clearESP()
 	espObjs = {}
 end
 local function makeESP(plr)
-	if espObjs[plr] then return end
 	local char = plr.Character
 	if not char then return end
+	if char:FindFirstChild("UNSTABLE_ESP") then return end
+	if espObjs[plr] and espObjs[plr].Parent then return end
 	local hl = Instance.new("Highlight")
 	hl.Name = "UNSTABLE_ESP"
 	hl.FillColor = Color3.fromRGB(255, 0, 0)
@@ -391,7 +414,7 @@ local function makeESP(plr)
 	hl.FillTransparency = 0.6
 	hl.Parent = char
 	local head = char:FindFirstChild("Head")
-	if head then
+	if head and not head:FindFirstChild("UNSTABLE_ESP_BB") then
 		local bb = Instance.new("BillboardGui")
 		bb.Name = "UNSTABLE_ESP_BB"
 		bb.Size = UDim2.new(0, 120, 0, 40)
@@ -444,6 +467,16 @@ task.spawn(function()
 		end
 	end
 end)
+Players.PlayerAdded:Connect(function(plr)
+	plr.CharacterAdded:Connect(function()
+		if espObjs[plr] then espObjs[plr] = nil end
+	end)
+end)
+for _, plr in ipairs(Players:GetPlayers()) do
+	plr.CharacterAdded:Connect(function()
+		if espObjs[plr] then espObjs[plr] = nil end
+	end)
+end
 Players.PlayerRemoving:Connect(function(plr)
 	if espObjs[plr] then
 		pcall(function() espObjs[plr]:Destroy() end)
@@ -525,19 +558,41 @@ end)
 -- log at the bottom. Solara PC, RightShift toggles, X minimises
 -- to a draggable ANTH logo.
 local guiParent = nil
-pcall(function() guiParent = game:GetService("CoreGui") end)
-if not guiParent then guiParent = LocalPlayer:FindFirstChild("PlayerGui") end
+if gethui then
+	local ok, r = pcall(gethui)
+	if ok and r then guiParent = r end
+end
+if not guiParent then guiParent = LocalPlayer:WaitForChild("PlayerGui") end
 local gui = Instance.new("ScreenGui")
 gui.Name = "UnstableANTH"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.DisplayOrder = 999
 gui.Parent = guiParent
+-- Load toast, so you can SEE it loaded even before you open the hub
+local toast = Instance.new("TextLabel")
+toast.Size = UDim2.new(0, 360, 0, 36)
+toast.Position = UDim2.new(0.5, -180, 0, 20)
+toast.BackgroundColor3 = Color3.fromRGB(185, 30, 35)
+toast.Text = "UNSTABLE v1.2 LOADED - RightShift to open"
+toast.TextColor3 = Color3.fromRGB(255, 255, 255)
+toast.Font = Enum.Font.GothamBold
+toast.TextSize = 14
+toast.Parent = gui
+local toastCorner = Instance.new("UICorner")
+toastCorner.CornerRadius = UDim.new(0, 8)
+toastCorner.Parent = toast
+task.spawn(function()
+	task.wait(4)
+	pcall(function() toast:Destroy() end)
+end)
 local main = Instance.new("Frame")
 main.Size = UDim2.new(0, 560, 0, 420)
 main.AnchorPoint = Vector2.new(0.5, 0.5)
 main.Position = UDim2.new(0.5, 0, 0.5, 0)
 main.BackgroundColor3 = Color3.fromRGB(22, 22, 24)
 main.BorderSizePixel = 0
+main.Visible = true
 main.Parent = gui
 local mainCorner = Instance.new("UICorner")
 mainCorner.CornerRadius = UDim.new(0, 10)
