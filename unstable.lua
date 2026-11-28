@@ -1,5 +1,11 @@
--- UNSTABLE SMP FFA | ANTH Hub v1.0
+-- UNSTABLE SMP FFA | ANTH Hub v1.1
 -- For Anth - Solara PC
+-- v1.1: UI restyled to match Jailbreak for Gooners / Enchanted Hub
+-- (red header, pill tabs, red checkbox rows, log at bottom).
+-- Added Auto Hit (Kill Aura, same thing, clearer name) and
+-- Safe Mode + Anti-Cheat Check. There is NO script that bypasses
+-- all anti-cheat - Safe Mode just makes you look human: capped
+-- range, 0.65s swing, no teleport, no crazy speed.
 -- Game: Unstable SMP FFA by [IS] Insomnia Studios
 -- Java 1.21 style combat: sword / spear / mace, shield, totem,
 -- golden apples, elytra + rockets, wind charges, pearls, tridents.
@@ -70,6 +76,8 @@ end)
 -- ================= SETTINGS =================
 local S = {
 	KillAura = false,
+	AutoHit = false,
+	SafeMode = true,
 	FaceTarget = true,
 	WallCheck = true,
 	AerialPriority = true,
@@ -114,7 +122,39 @@ LocalPlayer.Idled:Connect(function()
 	end)
 end)
 
--- ================= WEAPONS =================
+-- ================= ANTI-CHEAT / SAFE MODE =================
+-- Honest check, run from the Utility tab. Roblox Hyperion +
+-- the game's own server checks flag impossible speed, teleport
+-- distance, and too-fast hits. No client script can bypass
+-- all of that. Safe Mode is the closest thing: human swing
+-- timing, capped range/speed, no teleport, Wall Check on.
+-- Turning Safe Mode OFF lets you go to range 22 / speed 50,
+-- but that is much more likely to get flagged / reported.
+local function effectiveRange()
+	if S.SafeMode then return math.min(S.AuraRange, 14) end
+	return S.AuraRange
+end
+local function effectiveSwing()
+	if S.SafeMode then return 0.65 end
+	return 0.45
+end
+local function checkAntiCheat()
+	log("Anti-Cheat Check:")
+	log(" - No full bypass exists. Hyperion + server checks are server-side.")
+	if S.SafeMode then
+		log(" - Safe Mode ON: range capped 14, swing 0.65s, speed capped 28")
+	else
+		log(" - WARNING: Safe Mode OFF - range/speed uncapped, high flag risk")
+	end
+	if S.WallCheck then log(" - Wall Check ON: no hits through walls") else log(" - WARNING: Wall Check OFF") end
+	if S.Fly and S.Speed then log(" - WARNING: Fly + Speed together is obvious") end
+	local hum = getHum()
+	if hum then log(" - Character OK, HP " .. math.floor(hum.Health)) else log(" - No character yet - respawn first") end
+	local w = findWeapon()
+	if w then log(" - Weapon found: " .. w.Name) else log(" - No weapon found - pick a kit first") end
+	log(" - Use an ALT, small server, short sessions.")
+end
+_G.UNSTABLE_CheckAntiCheat = checkAntiCheat
 -- Game kits give you real Tools in your Backpack. Find the best one.
 -- Mace first when you are falling (smash), then Sword, then Spear / Axe / Trident.
 local function findWeapon()
@@ -197,7 +237,7 @@ local function getTarget()
 			local thrp = plr.Character:FindFirstChild("HumanoidRootPart")
 			if hum and hum.Health > 0 and thrp then
 				local dist = (thrp.Position - hrp.Position).Magnitude
-				if dist <= S.AuraRange and hasLineOfSight(thrp) then
+				if dist <= effectiveRange() and hasLineOfSight(thrp) then
 					local score = dist
 					if S.AerialPriority and thrp.Position.Y > hrp.Position.Y + 6 then score = score - 20 end
 					if S.LowestHP then score = score + (hum.Health * 0.1) end
@@ -216,7 +256,7 @@ local function getDummy()
 	local hrp = getHRP()
 	if not hrp then return nil end
 	local best = nil
-	local bestDist = S.AuraRange
+	local bestDist = effectiveRange()
 	for _, m in ipairs(Workspace:GetDescendants()) do
 		if m:IsA("Model") and m.Name:lower():find("dummy") then
 			local hum = m:FindFirstChildOfClass("Humanoid")
@@ -245,7 +285,7 @@ end
 task.spawn(function()
 	while isCurrent() do
 		task.wait(0.08)
-		if S.KillAura then
+		if S.KillAura or S.AutoHit then
 			local hrp = getHRP()
 			local hum = getHum()
 			if hrp and hum and hum.Health > 0 then
@@ -266,7 +306,7 @@ task.spawn(function()
 						local vel = hrp.AssemblyLinearVelocity
 						if vel.Y < -8 and targetHRP.Position.Y < hrp.Position.Y - 3 then falling = true end
 					end
-					if os.clock() - LastSwing >= SwingCooldown then
+					if os.clock() - LastSwing >= effectiveSwing() then
 						local weapon = findWeapon()
 						if not weapon then
 							log("Aura: no weapon in backpack - pick a kit first")
@@ -424,7 +464,9 @@ RunService.Heartbeat:Connect(function()
 	local hrp = getHRP()
 	if not hum or not hrp then return end
 	if S.Speed then
-		pcall(function() hum.WalkSpeed = S.SpeedValue end)
+		local sp = S.SpeedValue
+		if S.SafeMode then sp = math.min(sp, 28) end
+		pcall(function() hum.WalkSpeed = sp end)
 	else
 		if hum.WalkSpeed ~= 16 then pcall(function() hum.WalkSpeed = 16 end) end
 	end
@@ -477,170 +519,292 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 	stopFly()
 end)
 
--- ================= UI =================
-local parentGui = nil
-pcall(function() parentGui = game:GetService("CoreGui") end)
-if not parentGui then parentGui = LocalPlayer:FindFirstChild("PlayerGui") end
+-- ================= UI - Enchanted Hub style =================
+-- Same layout as Jailbreak for Gooners in Anth's screenshot:
+-- red header, pill tabs, red checkbox rows, --- sections ---,
+-- log at the bottom. Solara PC, RightShift toggles, X minimises
+-- to a draggable ANTH logo.
+local guiParent = nil
+pcall(function() guiParent = game:GetService("CoreGui") end)
+if not guiParent then guiParent = LocalPlayer:FindFirstChild("PlayerGui") end
 local gui = Instance.new("ScreenGui")
 gui.Name = "UnstableANTH"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.Parent = parentGui
-
+gui.Parent = guiParent
 local main = Instance.new("Frame")
-main.Name = "Main"
-main.Size = UDim2.new(0, 520, 0, 380)
-main.Position = UDim2.new(0.5, -260, 0.5, -190)
-main.BackgroundColor3 = Color3.fromRGB(12, 12, 14)
+main.Size = UDim2.new(0, 560, 0, 420)
+main.AnchorPoint = Vector2.new(0.5, 0.5)
+main.Position = UDim2.new(0.5, 0, 0.5, 0)
+main.BackgroundColor3 = Color3.fromRGB(22, 22, 24)
 main.BorderSizePixel = 0
-main.Active = true
-main.Draggable = true
 main.Parent = gui
 local mainCorner = Instance.new("UICorner")
 mainCorner.CornerRadius = UDim.new(0, 10)
 mainCorner.Parent = main
 local mainStroke = Instance.new("UIStroke")
-mainStroke.Color = Color3.fromRGB(180, 0, 255)
-mainStroke.Thickness = 2
+mainStroke.Color = Color3.fromRGB(185, 30, 35)
+mainStroke.Thickness = 1
 mainStroke.Parent = main
-
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 38)
+titleBar.BackgroundColor3 = Color3.fromRGB(185, 30, 35)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = main
+local titleIcon = Instance.new("TextLabel")
+titleIcon.Size = UDim2.new(0, 26, 0, 26)
+titleIcon.Position = UDim2.new(0, 8, 0, 6)
+titleIcon.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+titleIcon.TextColor3 = Color3.fromRGB(185, 30, 35)
+titleIcon.Font = Enum.Font.GothamBold
+titleIcon.TextSize = 13
+titleIcon.Text = "US"
+titleIcon.Parent = titleBar
+local iconCorner = Instance.new("UICorner")
+iconCorner.CornerRadius = UDim.new(0, 13)
+iconCorner.Parent = titleIcon
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -50, 0, 40)
-title.Position = UDim2.new(0, 12, 0, 0)
+title.Size = UDim2.new(1, -90, 1, 0)
+title.Position = UDim2.new(0, 42, 0, 0)
 title.BackgroundTransparency = 1
-title.Text = "Unstable SMP FFA  |  ANTH Hub"
+title.Text = "Unstable SMP FFA | Public Version"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.Font = Enum.Font.GothamBold
-title.TextSize = 18
+title.TextSize = 13
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = main
-local sub = Instance.new("TextLabel")
-sub.Size = UDim2.new(1, -24, 0, 18)
-sub.Position = UDim2.new(0, 12, 0, 38)
-sub.BackgroundTransparency = 1
-sub.Text = "Solara PC  •  v1.0  •  Alt only - FFA / Duels / Practice Dummy"
-sub.TextColor3 = Color3.fromRGB(170, 170, 170)
-sub.Font = Enum.Font.Gotham
-sub.TextSize = 12
-sub.TextXAlignment = Enum.TextXAlignment.Left
-sub.Parent = main
-
-local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0, 32, 0, 32)
-closeBtn.Position = UDim2.new(1, -40, 0, 6)
-closeBtn.BackgroundColor3 = Color3.fromRGB(220, 40, 40)
-closeBtn.Text = "X"
-closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeBtn.Font = Enum.Font.GothamBold
-closeBtn.TextSize = 16
-closeBtn.Parent = main
-local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(0, 8)
-closeCorner.Parent = closeBtn
-
+title.Parent = titleBar
+local xBtn = Instance.new("TextButton")
+xBtn.Size = UDim2.new(0, 30, 0, 30)
+xBtn.Position = UDim2.new(1, -34, 0, 4)
+xBtn.BackgroundColor3 = Color3.fromRGB(140, 20, 25)
+xBtn.Text = "X"
+xBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+xBtn.Font = Enum.Font.GothamBold
+xBtn.TextSize = 14
+xBtn.Parent = titleBar
+local xCorner = Instance.new("UICorner")
+xCorner.CornerRadius = UDim.new(0, 6)
+xCorner.Parent = xBtn
+local tabNames = {"Combat", "Aim", "Move", "Utility"}
+local tabBtns = {}
 local tabBar = Instance.new("Frame")
-tabBar.Size = UDim2.new(1, -24, 0, 34)
-tabBar.Position = UDim2.new(0, 12, 0, 60)
+tabBar.Size = UDim2.new(1, -10, 0, 32)
+tabBar.Position = UDim2.new(0, 5, 0, 44)
 tabBar.BackgroundTransparency = 1
 tabBar.Parent = main
-
-local content = Instance.new("Frame")
-content.Size = UDim2.new(1, -24, 0, 240)
-content.Position = UDim2.new(0, 12, 0, 100)
-content.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+for i, name in ipairs(tabNames) do
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1 / 4, -3, 0, 29)
+	b.Position = UDim2.new((i - 1) / 4, 1, 0, 0)
+	b.BackgroundColor3 = Color3.fromRGB(58, 58, 62)
+	b.Text = name
+	b.TextColor3 = Color3.fromRGB(210, 210, 210)
+	b.Font = Enum.Font.Gotham
+	b.TextSize = 12
+	b.Parent = tabBar
+	local cc = Instance.new("UICorner")
+	cc.CornerRadius = UDim.new(0, 6)
+	cc.Parent = b
+	tabBtns[name] = b
+end
+local content = Instance.new("ScrollingFrame")
+content.Size = UDim2.new(1, -10, 0, 238)
+content.Position = UDim2.new(0, 5, 0, 82)
+content.BackgroundColor3 = Color3.fromRGB(28, 28, 30)
 content.BorderSizePixel = 0
+content.ScrollBarThickness = 4
+content.CanvasSize = UDim2.new(0, 0, 0, 0)
+content.AutomaticCanvasSize = Enum.AutomaticSize.Y
 content.Parent = main
 local contentCorner = Instance.new("UICorner")
 contentCorner.CornerRadius = UDim.new(0, 8)
 contentCorner.Parent = content
-
+local contentLayout = Instance.new("UIListLayout")
+contentLayout.Padding = UDim.new(0, 4)
+contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+contentLayout.Parent = content
+local contentPad = Instance.new("UIPadding")
+contentPad.PaddingTop = UDim.new(0, 6)
+contentPad.PaddingLeft = UDim.new(0, 6)
+contentPad.PaddingRight = UDim.new(0, 6)
+contentPad.PaddingBottom = UDim.new(0, 6)
+contentPad.Parent = content
 local logLabel = Instance.new("TextLabel")
-logLabel.Name = "Log"
-logLabel.Size = UDim2.new(1, -24, 0, 28)
-logLabel.Position = UDim2.new(0, 12, 0, 346)
-logLabel.BackgroundTransparency = 1
-logLabel.Text = "Ready. Pick a kit, then turn on Kill Aura."
-logLabel.TextColor3 = Color3.fromRGB(120, 255, 120)
-logLabel.Font = Enum.Font.Gotham
-logLabel.TextSize = 12
+logLabel.Size = UDim2.new(1, -10, 0, 48)
+logLabel.Position = UDim2.new(0, 5, 0, 326)
+logLabel.BackgroundColor3 = Color3.fromRGB(14, 14, 16)
+logLabel.TextColor3 = Color3.fromRGB(255, 120, 120)
+logLabel.Font = Enum.Font.Code
+logLabel.TextSize = 11
 logLabel.TextXAlignment = Enum.TextXAlignment.Left
+logLabel.TextYAlignment = Enum.TextYAlignment.Top
+logLabel.TextWrapped = true
+logLabel.Text = "Loaded. Pick a tab. Safe Mode ON."
 logLabel.Parent = main
 _G.UNSTABLE_Log = logLabel
-
-local tabFrames = {}
-local tabButtons = {}
-local function makeTab(name, x)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0, 118, 0, 34)
-	btn.Position = UDim2.new(0, x, 0, 0)
-	btn.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
-	btn.Text = name
-	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	btn.Font = Enum.Font.GothamBold
-	btn.TextSize = 14
-	btn.Parent = tabBar
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, 8)
-	c.Parent = btn
-	local f = Instance.new("Frame")
-	f.Size = UDim2.new(1, 0, 1, 0)
-	f.BackgroundTransparency = 1
-	f.Visible = false
-	f.Parent = content
-	tabFrames[name] = f
-	tabButtons[name] = btn
-	btn.MouseButton1Click:Connect(function()
-		for n, fr in pairs(tabFrames) do fr.Visible = false end
-		for n, b in pairs(tabButtons) do b.BackgroundColor3 = Color3.fromRGB(40, 40, 48) end
-		f.Visible = true
-		btn.BackgroundColor3 = Color3.fromRGB(180, 0, 255)
-	end)
-	return f
+local statsLabel = Instance.new("TextLabel")
+statsLabel.Size = UDim2.new(1, -10, 0, 14)
+statsLabel.Position = UDim2.new(0, 5, 0, 380)
+statsLabel.BackgroundTransparency = 1
+statsLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
+statsLabel.Font = Enum.Font.Code
+statsLabel.TextSize = 10
+statsLabel.TextXAlignment = Enum.TextXAlignment.Left
+statsLabel.Text = "Solara PC  •  v1.1  •  RightShift toggles hub"
+statsLabel.Parent = main
+local logo = Instance.new("TextButton")
+logo.Size = UDim2.new(0, 64, 0, 64)
+logo.Position = UDim2.new(0, 10, 0.5, -32)
+logo.BackgroundColor3 = Color3.fromRGB(22, 22, 24)
+logo.Text = "ANTH"
+logo.TextColor3 = Color3.fromRGB(255, 80, 80)
+logo.Font = Enum.Font.GothamBold
+logo.TextSize = 14
+logo.Visible = false
+logo.Parent = gui
+local logoCorner = Instance.new("UICorner")
+logoCorner.CornerRadius = UDim.new(0, 32)
+logoCorner.Parent = logo
+local logoStroke = Instance.new("UIStroke")
+logoStroke.Color = Color3.fromRGB(185, 30, 35)
+logoStroke.Thickness = 2
+logoStroke.Parent = logo
+local function maximise()
+	main.Visible = true
+	logo.Visible = false
+	pcall(function() main.Position = UDim2.new(0.5, 0, 0.5, 0) end)
 end
-local combatTab = makeTab("Combat", 0)
-local aimTab = makeTab("Aim / ESP", 124)
-local moveTab = makeTab("Move", 248)
-local utilTab = makeTab("Utility", 372)
-tabFrames["Combat"].Visible = true
-tabButtons["Combat"].BackgroundColor3 = Color3.fromRGB(180, 0, 255)
-
-local function addToggle(parent, y, text, key, default)
-	local row = Instance.new("Frame")
-	row.Size = UDim2.new(1, -20, 0, 32)
-	row.Position = UDim2.new(0, 10, 0, y)
-	row.BackgroundTransparency = 1
-	row.Parent = parent
+local function minimise()
+	main.Visible = false
+	logo.Visible = true
+end
+xBtn.MouseButton1Click:Connect(minimise)
+logo.MouseButton1Click:Connect(maximise)
+UserInputService.InputBegan:Connect(function(input, gp)
+	if gp then return end
+	if input.KeyCode == Enum.KeyCode.RightShift then
+		if main.Visible then minimise() else maximise() end
+	end
+end)
+local function makeDraggable(handle, target)
+	local dragging = false
+	local dragStart = nil
+	local startPos = nil
+	handle.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = target.Position
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStart
+			target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+end
+makeDraggable(titleBar, main)
+makeDraggable(logo, logo)
+local currentTab = "Combat"
+local function clearContent()
+	for _, c in ipairs(content:GetChildren()) do
+		if c:IsA("TextButton") or c:IsA("TextLabel") then c:Destroy() end
+	end
+end
+local function makeRow()
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1, -4, 0, 34)
+	b.Text = ""
+	b.BackgroundColor3 = Color3.fromRGB(48, 48, 52)
+	b.TextColor3 = Color3.fromRGB(235, 235, 235)
+	b.Font = Enum.Font.Gotham
+	b.TextSize = 13
+	b.TextXAlignment = Enum.TextXAlignment.Left
+	b.Parent = content
+	local cc = Instance.new("UICorner")
+	cc.CornerRadius = UDim.new(0, 6)
+	cc.Parent = b
+	return b
+end
+local function makeSection(text)
 	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1, -50, 1, 0)
+	lbl.Size = UDim2.new(1, -4, 0, 22)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = "--- " .. text .. " ---"
+	lbl.TextColor3 = Color3.fromRGB(170, 170, 170)
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 12
+	lbl.Parent = content
+	return lbl
+end
+local function makeNote(text)
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -4, 0, 36)
 	lbl.BackgroundTransparency = 1
 	lbl.Text = text
-	lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+	lbl.TextColor3 = Color3.fromRGB(170, 170, 170)
 	lbl.Font = Enum.Font.Gotham
-	lbl.TextSize = 14
+	lbl.TextSize = 12
+	lbl.TextWrapped = true
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Parent = row
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0, 40, 0, 26)
-	btn.Position = UDim2.new(1, -40, 0, 3)
-	btn.BackgroundColor3 = default and Color3.fromRGB(0, 200, 80) or Color3.fromRGB(60, 60, 68)
-	btn.Text = ""
-	btn.Parent = row
-	local bc = Instance.new("UICorner")
-	bc.CornerRadius = UDim.new(0, 6)
-	bc.Parent = btn
+	lbl.TextYAlignment = Enum.TextYAlignment.Top
+	lbl.Parent = content
+	return lbl
+end
+local function makeToggle(label, key)
+	local b = makeRow()
+	local box = Instance.new("Frame")
+	box.Size = UDim2.new(0, 18, 0, 18)
+	box.Position = UDim2.new(0, 8, 0, 8)
+	box.BackgroundColor3 = Color3.fromRGB(48, 48, 52)
+	box.BorderSizePixel = 0
+	box.Parent = b
+	local boxStroke = Instance.new("UIStroke")
+	boxStroke.Color = Color3.fromRGB(185, 30, 35)
+	boxStroke.Thickness = 2
+	boxStroke.Parent = box
+	local boxCorner = Instance.new("UICorner")
+	boxCorner.CornerRadius = UDim.new(0, 4)
+	boxCorner.Parent = box
 	local check = Instance.new("TextLabel")
 	check.Size = UDim2.new(1, 0, 1, 0)
 	check.BackgroundTransparency = 1
-	check.Text = default and "ON" or "OFF"
+	check.Text = ""
 	check.TextColor3 = Color3.fromRGB(255, 255, 255)
 	check.Font = Enum.Font.GothamBold
-	check.TextSize = 11
-	check.Parent = btn
-	btn.MouseButton1Click:Connect(function()
+	check.TextSize = 13
+	check.Parent = box
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -36, 1, 0)
+	lbl.Position = UDim2.new(0, 34, 0, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = label
+	lbl.TextColor3 = Color3.fromRGB(235, 235, 235)
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 13
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.Parent = b
+	local function refresh()
+		if S[key] then
+			box.BackgroundColor3 = Color3.fromRGB(185, 30, 35)
+			check.Text = "✓"
+		else
+			box.BackgroundColor3 = Color3.fromRGB(48, 48, 52)
+			check.Text = ""
+		end
+	end
+	refresh()
+	b.MouseButton1Click:Connect(function()
 		S[key] = not S[key]
-		btn.BackgroundColor3 = S[key] and Color3.fromRGB(0, 200, 80) or Color3.fromRGB(60, 60, 68)
-		check.Text = S[key] and "ON" or "OFF"
-		log(text .. ": " .. (S[key] and "ON" or "OFF"))
+		refresh()
+		log(label .. ": " .. (S[key] and "ON" or "OFF"))
+		if key == "SafeMode" and not S[key] then log("WARNING: Safe Mode OFF - high flag risk") end
 		if key == "Noclip" and not S[key] then
 			local char = getChar()
 			if char then
@@ -651,118 +815,112 @@ local function addToggle(parent, y, text, key, default)
 		end
 		if key == "Fly" and not S[key] then stopFly() end
 		if key == "ESP" and not S[key] then clearESP() end
+		if key == "AutoHit" then S.KillAura = S[key] end
+		if key == "KillAura" then S.AutoHit = S[key] end
 	end)
-	return btn
+	return b
 end
-local function addCycle(parent, y, text, key, values)
-	local row = Instance.new("Frame")
-	row.Size = UDim2.new(1, -20, 0, 32)
-	row.Position = UDim2.new(0, 10, 0, y)
-	row.BackgroundTransparency = 1
-	row.Parent = parent
+local function makeCycle(label, key, values)
+	local b = makeRow()
 	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1, -110, 1, 0)
+	lbl.Size = UDim2.new(1, -120, 1, 0)
+	lbl.Position = UDim2.new(0, 8, 0, 0)
 	lbl.BackgroundTransparency = 1
-	lbl.Text = text
-	lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+	lbl.Text = label
+	lbl.TextColor3 = Color3.fromRGB(235, 235, 235)
 	lbl.Font = Enum.Font.Gotham
-	lbl.TextSize = 14
+	lbl.TextSize = 13
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Parent = row
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0, 100, 0, 26)
-	btn.Position = UDim2.new(1, -100, 0, 3)
-	btn.BackgroundColor3 = Color3.fromRGB(60, 60, 68)
-	btn.Text = tostring(S[key])
-	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	btn.Font = Enum.Font.GothamBold
-	btn.TextSize = 13
-	btn.Parent = row
-	local bc = Instance.new("UICorner")
-	bc.CornerRadius = UDim.new(0, 6)
-	bc.Parent = btn
-	btn.MouseButton1Click:Connect(function()
+	lbl.Parent = b
+	local val = Instance.new("TextLabel")
+	val.Size = UDim2.new(0, 100, 1, 0)
+	val.Position = UDim2.new(1, -108, 0, 0)
+	val.BackgroundTransparency = 1
+	val.Text = tostring(S[key]) .. "  v"
+	val.TextColor3 = Color3.fromRGB(235, 235, 235)
+	val.Font = Enum.Font.GothamBold
+	val.TextSize = 13
+	val.TextXAlignment = Enum.TextXAlignment.Right
+	val.Parent = b
+	b.MouseButton1Click:Connect(function()
 		local idx = 1
 		for i, v in ipairs(values) do if v == S[key] then idx = i break end end
 		idx = idx + 1
 		if idx > #values then idx = 1 end
 		S[key] = values[idx]
-		btn.Text = tostring(S[key])
-		log(text .. ": " .. tostring(S[key]))
+		val.Text = tostring(S[key]) .. "  v"
+		log(label .. ": " .. tostring(S[key]))
 	end)
+	return b
 end
-
-addToggle(combatTab, 4, "Kill Aura", "KillAura", false)
-addToggle(combatTab, 36, "Face Target", "FaceTarget", true)
-addToggle(combatTab, 68, "Wall Check (no hits through walls)", "WallCheck", true)
-addToggle(combatTab, 100, "Aerial Priority (elytra / mace divers first)", "AerialPriority", true)
-addToggle(combatTab, 132, "Target Lowest HP", "LowestHP", false)
-addToggle(combatTab, 164, "Auto Mace Smash (falling only)", "AutoMace", false)
-addCycle(combatTab, 196, "Aura Range (studs)", "AuraRange", {10, 14, 18, 22})
-
-addToggle(aimTab, 8, "Aimbot (camera lock, nearest)", "Aimbot", false)
-addToggle(aimTab, 44, "Player ESP (box + name)", "ESP", false)
-addToggle(aimTab, 80, "ESP Show Health", "ESPHealth", true)
-addToggle(aimTab, 116, "Attack Practice Dummies too", "AttackDummies", false)
-addToggle(aimTab, 152, "Auto Eat Golden Apple", "AutoEat", false)
-addCycle(aimTab, 188, "Auto Eat At (% HP)", "EatAt", {30, 55, 75})
-
-addToggle(moveTab, 8, "Fly (WASD, Space up, Ctrl down)", "Fly", false)
-addToggle(moveTab, 44, "Speed", "Speed", false)
-addToggle(moveTab, 80, "Infinite Jump", "InfJump", false)
-addToggle(moveTab, 116, "Noclip", "Noclip", false)
-addCycle(moveTab, 152, "Speed Value", "SpeedValue", {20, 28, 36, 50})
-addCycle(moveTab, 188, "Fly Speed", "FlySpeed", {35, 50, 75, 100})
-
-addToggle(utilTab, 8, "Anti-AFK", "AntiAFK", true)
-local info = Instance.new("TextLabel")
-info.Size = UDim2.new(1, -20, 0, 150)
-info.Position = UDim2.new(0, 10, 0, 50)
-info.BackgroundTransparency = 1
-info.Text = "Tips:\n• Practice Dummy first - test Aura + Auto Eat there.\n• Aura range 14 is safest, 22 is obvious.\n• Speed over 36 + Fly in FFA = easy report / ban.\n• If Aura does nothing, your kit has no weapon tool\n  equipped - pick a kit, then rejoin if needed.\n• RightShift toggles this hub."
-info.TextColor3 = Color3.fromRGB(200, 200, 200)
-info.Font = Enum.Font.Gotham
-info.TextSize = 13
-info.TextXAlignment = Enum.TextXAlignment.Left
-info.TextYAlignment = Enum.TextYAlignment.Top
-info.Parent = utilTab
-
--- Minimise logo
-local logo = Instance.new("TextButton")
-logo.Name = "ANTHLogo"
-logo.Size = UDim2.new(0, 64, 0, 64)
-logo.Position = UDim2.new(0, 20, 0.5, -32)
-logo.BackgroundColor3 = Color3.fromRGB(12, 12, 14)
-logo.Text = "ANTH"
-logo.TextColor3 = Color3.fromRGB(120, 255, 120)
-logo.Font = Enum.Font.GothamBold
-logo.TextSize = 14
-logo.Visible = false
-logo.Active = true
-logo.Draggable = true
-logo.Parent = gui
-local logoCorner = Instance.new("UICorner")
-logoCorner.CornerRadius = UDim.new(0, 32)
-logoCorner.Parent = logo
-local logoStroke = Instance.new("UIStroke")
-logoStroke.Color = Color3.fromRGB(180, 0, 255)
-logoStroke.Thickness = 2
-logoStroke.Parent = logo
-closeBtn.MouseButton1Click:Connect(function()
-	main.Visible = false
-	logo.Visible = true
-end)
-logo.MouseButton1Click:Connect(function()
-	main.Visible = true
-	logo.Visible = false
-end)
-UserInputService.InputBegan:Connect(function(input, gpe)
-	if gpe then return end
-	if input.KeyCode == Enum.KeyCode.RightShift then
-		main.Visible = not main.Visible
-		if not main.Visible then logo.Visible = true else logo.Visible = false end
+local function makeButton(label, fn)
+	local b = makeRow()
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -16, 1, 0)
+	lbl.Position = UDim2.new(0, 8, 0, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = label
+	lbl.TextColor3 = Color3.fromRGB(235, 235, 235)
+	lbl.Font = Enum.Font.GothamBold
+	lbl.TextSize = 13
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.Parent = b
+	b.MouseButton1Click:Connect(function() fn() end)
+	return b
+end
+local function renderTab(name)
+	clearContent()
+	currentTab = name
+	for n, b in pairs(tabBtns) do
+		if n == name then
+			b.BackgroundColor3 = Color3.fromRGB(185, 30, 35)
+			b.TextColor3 = Color3.fromRGB(255, 255, 255)
+		else
+			b.BackgroundColor3 = Color3.fromRGB(58, 58, 62)
+			b.TextColor3 = Color3.fromRGB(210, 210, 210)
+		end
 	end
-end)
-
-log("Unstable ANTH v1.0 loaded - pick a kit, then turn on Kill Aura")
-print("[Unstable ANTH] v1.0 loaded")
+	if name == "Combat" then
+		makeSection("Auto Hit")
+		makeToggle("Auto Hit - Kill Aura", "AutoHit")
+		makeToggle("Face Target", "FaceTarget")
+		makeToggle("Wall Check (no hits through walls)", "WallCheck")
+		makeToggle("Aerial Priority (elytra / mace divers first)", "AerialPriority")
+		makeToggle("Target Lowest HP", "LowestHP")
+		makeToggle("Auto Mace Smash (falling only)", "AutoMace")
+		makeCycle("Aura Range (studs)", "AuraRange", {10, 14, 18, 22})
+		makeNote("Auto Hit equips your real weapon and swings on the game's 0.65s cooldown in Safe Mode. Range 14 is safest.")
+	elseif name == "Aim" then
+		makeSection("Aim / ESP")
+		makeToggle("Aimbot (camera lock, nearest)", "Aimbot")
+		makeToggle("Player ESP (box + name)", "ESP")
+		makeToggle("ESP Show Health", "ESPHealth")
+		makeToggle("Attack Practice Dummies too", "AttackDummies")
+		makeToggle("Auto Eat Golden Apple", "AutoEat")
+		makeCycle("Auto Eat At (% HP)", "EatAt", {30, 55, 75})
+	elseif name == "Move" then
+		makeSection("Movement")
+		makeToggle("Fly (WASD, Space up, Ctrl down)", "Fly")
+		makeToggle("Speed", "Speed")
+		makeToggle("Infinite Jump", "InfJump")
+		makeToggle("Noclip", "Noclip")
+		makeCycle("Speed Value", "SpeedValue", {20, 28, 36, 50})
+		makeCycle("Fly Speed", "FlySpeed", {35, 50, 75, 100})
+		makeNote("Speed over 36 + Fly in FFA is obvious. Safe Mode caps Speed at 28.")
+	elseif name == "Utility" then
+		makeSection("Anti-Cheat / Safety")
+		makeToggle("Safe Mode (capped range / speed / swing)", "SafeMode")
+		makeToggle("Anti-AFK", "AntiAFK")
+		makeButton("Check Anti-Cheat  >  Run safety check", function() checkAntiCheat() end)
+		makeNote("There is NO full bypass. Safe Mode just makes hits look human. Use an ALT, small server, short sessions.")
+		makeSection("Tips")
+		makeNote("Practice Dummy first - test Auto Hit + Auto Eat there.\nIf Auto Hit does nothing, your kit has no weapon tool - pick a kit, then rejoin if needed.")
+	end
+end
+for n, b in pairs(tabBtns) do
+	b.MouseButton1Click:Connect(function() renderTab(n) end)
+end
+renderTab("Combat")
+log("Safe Mode ON. Use a small server, ALT only.")
+log("UNSTABLE SMP FFA loaded. Pick a kit, then turn on Auto Hit.")
+print("[Unstable ANTH] v1.1 loaded - Enchanted style UI, Auto Hit + Safe Mode")
